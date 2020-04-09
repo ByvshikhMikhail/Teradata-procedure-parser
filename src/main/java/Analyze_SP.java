@@ -1,12 +1,6 @@
 
 
-import gudusoft.gsqlparser.EDbVendor;
-import gudusoft.gsqlparser.ETableEffectType;
-import gudusoft.gsqlparser.ETokenType;
-import gudusoft.gsqlparser.TCustomSqlStatement;
-import gudusoft.gsqlparser.TGSqlParser;
-import gudusoft.gsqlparser.TSourceToken;
-import gudusoft.gsqlparser.TSourceTokenList;
+import gudusoft.gsqlparser.*;
 import gudusoft.gsqlparser.nodes.*;
 import gudusoft.gsqlparser.stmt.*;
 import gudusoft.gsqlparser.stmt.db2.TDb2WhileStmt;
@@ -384,8 +378,10 @@ public class Analyze_SP
             List<tableInfo> tableInfos = new ArrayList<tableInfo>( );
             tableTokensInStmt( columnInfos, tableInfos, selectStmt );
             Map columnMap = new HashMap( );
+
             for ( int i = 0; i < columnInfos.size( ); i++ )
             {
+
                 columnInfo column = columnInfos.get( i );
                 tableInfo table = column.table;
                 if ( columnMap.containsKey( table ) )
@@ -413,17 +409,21 @@ public class Analyze_SP
                     columns.add( column );
                 }
             }
+
             for ( int i = 0; i < tableInfos.size( ); i++ )
             {
-                operateInfo operateInfo = new operateInfo( );
 
+
+                operateInfo operateInfo = new operateInfo( );
+                operateInfo.joinType = tableInfos.get(i).joinType;
                 if ( tableInfos.get( i ).stmt instanceof TSelectSqlStatement
                         && ( (TSelectSqlStatement) tableInfos.get( i ).stmt ).getIntoClause( ) != null ) {
                     operateInfo.type = usageType.Insert;
                     operateInfo.tgtSchema = tableInfos.get( i ).toString().split("\\.")[0];
                     operateInfo.tgtTable = tableInfos.get( i ).toString( ).split("\\.")[1];
                 }
-                else {
+
+            else {
                     operateInfo.type = usageType.Select;
                     operateInfo.srcSchema = tableInfos.get( i ).toString().split("\\.")[0];
                     operateInfo.srcTable = tableInfos.get( i ).toString( ).split("\\.")[1];
@@ -436,6 +436,19 @@ public class Analyze_SP
 //                        operateInfo.objectUsed = column.table.toString( );
                     }
                 }
+                if( selectStmt.getWhereClause() != null)
+                {
+//                    System.out.println("Where  " + selectStmt.getWhereClause());
+                    operateInfo.where = selectStmt.getWhereClause().toScript();
+                }
+
+
+                if( selectStmt.getJoins() != null)
+                {
+//                    System.out.println("Where  " + selectStmt.getJoins());
+//                    operateInfo.where = selectStmt.getWhereClause().toScript();
+                }
+
                 procedureInfo.operates.add( operateInfo );
             }
         }
@@ -529,6 +542,11 @@ public class Analyze_SP
     protected void tableTokensInStmt( List<columnInfo> columnInfos,
                                       List<tableInfo> tableInfos, TCustomSqlStatement stmt )
     {
+        for ( int i = 0; i < stmt.getStatements( ).size( ); i++ )
+        {
+            tableTokensInStmt( columnInfos, tableInfos, stmt.getStatements( )
+                    .get( i ) );
+        }
         for ( int i = 0; i < stmt.tables.size( ); i++ )
         {
             if ( stmt.tables.getTable( i ).isBaseTable( ) )
@@ -547,6 +565,30 @@ public class Analyze_SP
                 tableInfo tableInfo = new tableInfo( );
                 tableInfo.fullName = stmt.tables.getTable( i ).getFullName( );
                 tableInfos.add( tableInfo );
+                System.out.println("table info full name : " + tableInfo.fullName);
+                if(stmt.joins.getJoin(0).getJoinItems().size() != 0 & i <= stmt.joins.getJoin(0).getJoinItems().size()  ) {
+
+                    for(int j = 0; j < stmt.joins.getJoin(0).getJoinItems().size(); j++){
+                        if(stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getTable().equals(stmt.tables.getTable(i))){
+                            System.out.println("Joins " + stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getJoinType());
+                            String join = stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getJoinType().toString();
+                            switch (join) {
+                                case "inner" :
+                                    tableInfo.joinType = joinType.inner;
+                                    break;
+                                case "left" :
+                                    tableInfo.joinType = joinType.left;
+                                    break;
+                                case "right" :
+                                    tableInfo.joinType = joinType.right;
+                                    break;
+                                case "full" :
+                                    tableInfo.joinType = joinType.full;
+                                    break;
+                            }
+                        }
+                    }
+                }
 
                 for ( int j = 0; j < stmt.tables.getTable( i )
                         .getLinkedColumns( )
@@ -575,12 +617,6 @@ public class Analyze_SP
                 tableInfo.stmt = stmt;
                 tableInfos.add( tableInfo );
             }
-        }
-
-        for ( int i = 0; i < stmt.getStatements( ).size( ); i++ )
-        {
-            tableTokensInStmt( columnInfos, tableInfos, stmt.getStatements( )
-                    .get( i ) );
         }
     }
 
@@ -643,7 +679,7 @@ class tableInfo
 {
 
     public String fullName;
-
+    public joinType joinType;
     public TCustomSqlStatement stmt;
 
     public String toString( )
@@ -656,6 +692,6 @@ enum usageType {
     Select, Insert, Update, Create, Delete, Drop, Call, Lock, Exec, Read
 }
 
-enum joinType{
+enum joinType {
     inner, left, right, full
 }
