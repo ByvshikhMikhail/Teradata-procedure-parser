@@ -90,6 +90,8 @@ public class Analyze_SP
                 + delimiter
                 + "Join type"
                 + delimiter
+                + "on Condition"
+                + delimiter
                 + "Where"
                 + delimiter
                 + "Set"
@@ -416,6 +418,7 @@ public class Analyze_SP
 
                 operateInfo operateInfo = new operateInfo( );
                 operateInfo.joinType = tableInfos.get(i).joinType;
+                operateInfo.onCondition = tableInfos.get(i).onCondition;
                 if ( tableInfos.get( i ).stmt instanceof TSelectSqlStatement
                         && ( (TSelectSqlStatement) tableInfos.get( i ).stmt ).getIntoClause( ) != null ) {
                     operateInfo.type = usageType.Insert;
@@ -518,6 +521,8 @@ public class Analyze_SP
                                 .append( delimiter )
                                 .append( info.joinType == null ? "" : info.joinType)
                                 .append( delimiter )
+                                .append( info.onCondition == null ? "" : info.onCondition)
+                                .append( delimiter )
                                 .append( info.where == null ? "" : info.where)
                                 .append( delimiter )
                                 .append( info.set == null ? "" : info.set)
@@ -570,8 +575,10 @@ public class Analyze_SP
 
                     for(int j = 0; j < stmt.joins.getJoin(0).getJoinItems().size(); j++){
                         if(stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getTable().equals(stmt.tables.getTable(i))){
-                            System.out.println("Joins " + stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getJoinType());
+//                            System.out.println("Joins " + stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getJoinType());
                             String join = stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getJoinType().toString();
+                            System.out.println("OnCondition " + stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getOnCondition().toString());
+                            tableInfo.onCondition = stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getOnCondition().toScript().replace("\\n", "");
                             switch (join) {
                                 case "inner" :
                                     tableInfo.joinType = joinType.inner;
@@ -644,6 +651,7 @@ class operateInfo
     public String srcTable;
     public usageType type;
     public joinType joinType;
+    public String onCondition;
     public String where;
     public String set;
     public String callParams;
@@ -680,6 +688,7 @@ class tableInfo
 
     public String fullName;
     public joinType joinType;
+    public String onCondition;
     public TCustomSqlStatement stmt;
 
     public String toString( )
