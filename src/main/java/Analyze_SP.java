@@ -16,8 +16,7 @@ import gudusoft.gsqlparser.stmt.mssql.TMssqlDeclare;
 import gudusoft.gsqlparser.stmt.mssql.TMssqlDropTable;
 import gudusoft.gsqlparser.stmt.mssql.TMssqlExecute;
 import gudusoft.gsqlparser.stmt.mssql.TMssqlIfElse;
-import gudusoft.gsqlparser.stmt.mysql.TMySQLWhileStmt;
-import gudusoft.gsqlparser.stmt.teradata.TTeradataCreateProcedure;
+import gudusoft.gsqlparser.stmt.teradata.TTeradataLock;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -36,21 +35,12 @@ public class Analyze_SP
     {
         if ( args.length == 0 )
         {
-
             System.out.println( "Usage: java Analyze_SP scriptfile [/o <output file path>] [/d <csv delimiter character>]" );
-            System.out.println( "/o: Option, write the output stream to the specified file." );
-            System.out.println( "/d: Option, set the csv delimiter character. The default delimiter character instanceof '|'." );
-            System.out.println( "/a: Option, check all items." );
-            System.out.println( "/r: Option, check the database object relations in the store procedure." );
-            System.out.println( "/f: Option, check the built-in functions in the store procedure." );
-            System.out.println( "/t: Option, check if the store procedure contains try catch clause." );
             return;
         }
         System.out.println(args.toString());
         List array = Arrays.asList( args );
-
         List<File> files = new ArrayList<File>( );
-
         for ( int i = 0; i < array.size( ); i++ )
         {
             File file = new File( array.get( i ).toString( ) );
@@ -61,58 +51,19 @@ public class Analyze_SP
         }
 
         String outputFile = null;
-
         int index = array.indexOf( "/o" );
-
         if ( index != -1 && args.length > index + 1 )
         {
             outputFile = args[index + 1];
         }
-
         String delimiter = "|";
-
         index = array.indexOf( "/d" );
-
         if ( index != -1 && args.length > index + 1 )
         {
             delimiter = args[index + 1];
         }
 
-        boolean checkTryCatchClause = false;
-        boolean checkBuiltInFunction = false;
-        boolean checkDBObjectRelations = false;
-
-        if ( array.indexOf( "/a" ) != -1 )
-        {
-            checkTryCatchClause = true;
-            checkBuiltInFunction = true;
-            checkDBObjectRelations = true;
-        }
-        else
-        {
-            if ( array.indexOf( "/f" ) != -1 )
-            {
-                checkBuiltInFunction = true;
-            }
-            if ( array.indexOf( "/t" ) != -1 )
-            {
-                checkTryCatchClause = true;
-            }
-            if ( array.indexOf( "/r" ) != -1 )
-            {
-                checkDBObjectRelations = true;
-            }
-        }
-
-        if ( checkBuiltInFunction == false && checkTryCatchClause == false )
-        {
-            checkDBObjectRelations = true;
-        }
-
         Analyze_SP impact = new Analyze_SP( files, delimiter );
-        impact.setCheckBuiltInFunction( checkBuiltInFunction );
-        impact.setCheckTryCatchClause( checkTryCatchClause );
-        impact.setCheckDBObjectRelation( checkDBObjectRelations );
         impact.analyzeSQL( );
 
         PrintStream writer = null;
@@ -131,48 +82,46 @@ public class Analyze_SP
 
         }
 
-        if ( impact.checkObjectRelation )
-        {
-            System.out.println( "DB of Anayzed Object"
-                    + delimiter
-                    + "Name of Analyzed Object"
-                    + delimiter
-                    + "Object Type"
-                    + delimiter
-                    + "Object Used"
-                    + delimiter
-                    + "Object Type"
-                    + delimiter
-                    + "Usage Type"
-                    + delimiter
-                    + "Columns" );
+        System.out.println( "Purpose"
+                + delimiter
+                + "Target schema"
+                + delimiter
+                + "Target table"
+                + delimiter
+                + "Src_schema"
+                + delimiter
+                + "Src_table"
+                + delimiter
+                + "Type"
+                + delimiter
+                + "Join type"
+                + delimiter
+                + "Where"
+                + delimiter
+                + "Set"
+                + delimiter
+                + "Src file name"
+                + delimiter
+                + "Call Params"
+                + delimiter
+                + "Columns"
+                + delimiter
+                + "Max_cdc_date" );
+//            System.out.println( "DB of Anayzed Object"
+//                    + delimiter
+//                    + "Name of Analyzed Object"
+//                    + delimiter
+//                    + "Object Type"
+//                    + delimiter
+//                    + "Object Used"
+//                    + delimiter
+//                    + "Object Type"
+//                    + delimiter
+//                    + "Usage Type"
+//                    + delimiter
+//                    + "Columns" );
             System.out.println( impact.getDBObjectRelationsAnalysisResult( ) );
-        }
-        if ( impact.checkBuiltInFunction )
-        {
-            System.out.println( "File Name"
-                    + delimiter
-                    + "Built-in Function"
-                    + delimiter
-                    + "Line Number"
-                    + delimiter
-                    + "Column Number"
-                    + delimiter
-                    + "Usage Type"
-                    + delimiter );
-            System.out.println( impact.getBuiltInFunctionAnalysisResult( ) );
-        }
-        if ( impact.checkTryCatchClause )
-        {
-            System.out.println( "File Name"
-                    + delimiter
-                    + "DB of Anayzed Object"
-                    + delimiter
-                    + "Procedure"
-                    + delimiter
-                    + "With Try Catch" );
-            System.out.println( impact.getTryCatchClauseAnalysisResult( ) );
-        }
+
 
         if ( writer != null )
         {
@@ -182,13 +131,9 @@ public class Analyze_SP
     }
 
     private StringBuilder relationBuffer = new StringBuilder( );
-    private StringBuilder functionBuffer = new StringBuilder( );
-    private StringBuilder tryCatchBuffer = new StringBuilder( );
     private Map spInfoMap = new HashMap( );
     private List<String> files = new ArrayList<String>( );
     private String delimiter;
-    private boolean checkBuiltInFunction, checkTryCatchClause,
-            checkObjectRelation;
 
     public Analyze_SP( List<File> sqlFiles, String delimiter )
     {
@@ -199,25 +144,13 @@ public class Analyze_SP
             {
                 files.add( sqlFiles.get( i ).getAbsolutePath( ) );
                 spInfo sp = new spInfo( );
-                sp.file = sqlFiles.get( i ).getAbsolutePath( );
-//                procedureInfo procedureName = new procedureInfo( );
-//                procedureName.name = sp.file;
-//                sp.procedures.add(procedureName);
+                sp.file = sqlFiles.get( i ).getName( );
                 spInfoMap.put( sqlFiles.get( i ).getAbsolutePath( ), sp );
 
             }
         }
     }
 
-    void analyzeProcedure( procedureInfo procedureInfo,
-                           TTeradataCreateProcedure procedure )
-    {
-        for ( int i = 0; i < procedure.getStatements( ).size( ); i++ )
-        {
-            TCustomSqlStatement stmt = procedure.getStatements( ).get( i );
-            analyzeSqlStatement( procedureInfo, stmt );
-        }
-    }
 
     public void analyzeSQL( )
     {
@@ -246,37 +179,9 @@ public class Analyze_SP
         for ( int i = 0; i < sqlparser.sqlstatements.size( ); i++ )
         {
             TCustomSqlStatement sql = sqlparser.sqlstatements.get( i );
-            if ( sql instanceof TUseDatabase )
-            {
-                spInfo.db = ( (TUseDatabase) sql ).getDatabaseName( )
-                        .toString( );
-            }
-//            else if ( sql instanceof TMErge )
-            else if (sql instanceof TTeradataCreateProcedure)
-            {
-
-                procedureInfo.name = ( (TTeradataCreateProcedure) sql ).getProcedureName( )
-                        .toString( );
-                procedureInfo.objectType = objectType.SP;
-                if ( checkObjectRelation )
-                {
-                    analyzeProcedure( procedureInfo,
-                            (TTeradataCreateProcedure) sql );
-                }
-                if ( checkTryCatchClause )
-                {
-                    checkTryCatchClause( procedureInfo,
-                            (TTeradataCreateProcedure) sql );
-                }
-            }
-            else if ( procedureInfo != null )
+            if ( procedureInfo != null )
             {
                 analyzeSqlStatement( procedureInfo, sql );
-            }
-
-            if ( checkBuiltInFunction )
-            {
-                checkFunction( spInfo, sql.sourcetokenlist );
             }
         }
     }
@@ -284,9 +189,9 @@ public class Analyze_SP
     private void analyzeSqlStatement( procedureInfo procedureInfo,
                                       TCustomSqlStatement stmt )
     {
-        if ( stmt instanceof TMssqlBlock )
+        if ( stmt instanceof TBlockSqlStatement )
         {
-            TMssqlBlock block = (TMssqlBlock) stmt;
+            TBlockSqlStatement block = (TBlockSqlStatement) stmt;
             if ( block.getBodyStatements( ) != null )
             {
                 for ( int i = 0; i < block.getBodyStatements( ).size( ); i++ )
@@ -302,18 +207,14 @@ public class Analyze_SP
             if ( call.getAncestorStmt( ) != null )
             {
                 System.out.println("Debug");
-//                System.out.println(call.getAncestorStmt( ));
-//                System.out.println(call.getRoutineName());
+
                 System.out.println(call.getArgs());
-//                System.out.println(call.getParameterList());
-//                analyzeSqlStatement( procedureInfo, call.getAncestorStmt( ) );
                 operateInfo operateInfo = new operateInfo( );
-                operateInfo.objectType = objectType.SP;
-                operateInfo.objectUsed = call.getRoutineName()
-                        .toString( )
-                        .trim( );
-                operateInfo.usageType = usageType.Call;
-//                List<columnInfo> columns = (List<columnInfo>) columnMap.get( table );
+//                operateInfo.objectType = objectType.SP;
+//                operateInfo.objectUsed = call.getRoutineName()
+//                        .toString( )
+//                        .trim( );
+//                operateInfo.usageType = usageType.Call;
                 TExecParameterList columns = call.getParameterList();
                 for ( int i = 0; i < columns.size( ); i++ )
                 {
@@ -323,20 +224,23 @@ public class Analyze_SP
                 procedureInfo.operates.add( operateInfo );
             }
         }
-        else if ( stmt instanceof TMssqlIfElse )
+        //TODO исправить if else, ошибки почти гарантированы
+        else if ( stmt instanceof TIfStmt )
         {
-            TMssqlIfElse ifElse = (TMssqlIfElse) stmt;
-            if ( ifElse.getStmt( ) != null )
+
+            TIfStmt ifElse = (TIfStmt) stmt;
+            if ( ifElse.getThenStatements( ) != null )
             {
-                analyzeSqlStatement( procedureInfo, ifElse.getStmt( ) );
+                analyzeSqlStatement( procedureInfo, ifElse.getAncestorStmt( ) );
             }
             if ( ifElse.getCondition( ) != null )
             {
 
             }
-            if ( ifElse.getElseStmt( ) != null )
+
+            if ( ifElse.getElseStatements( ) != null )
             {
-                analyzeSqlStatement( procedureInfo, ifElse.getElseStmt( ) );
+                analyzeSqlStatement( procedureInfo, ifElse.getTopStatement() );
             }
         }
         else if ( stmt instanceof TMssqlDeclare )
@@ -348,28 +252,16 @@ public class Analyze_SP
                 analyzeSqlStatement( procedureInfo, declareStmt.getSubquery( ) );
             }
         }
-        else if ( stmt instanceof TMssqlExecute
-                && ( (TMssqlExecute) stmt ).getModuleName( ) != null )
-        {
-            TMssqlExecute executeStmt = (TMssqlExecute) stmt;
-            operateInfo operateInfo = new operateInfo( );
-            operateInfo.objectType = objectType.SP;
-            operateInfo.objectUsed = executeStmt.getModuleName( )
-                    .toString( )
-                    .trim( );
-            operateInfo.usageType = usageType.Exec;
-            procedureInfo.operates.add( operateInfo );
-        }
         else if ( stmt instanceof TCreateTableSqlStatement )
         {
             TCreateTableSqlStatement createStmt = (TCreateTableSqlStatement) stmt;
             TColumnDefinitionList columns = createStmt.getColumnList( );
             operateInfo operateInfo = new operateInfo( );
-            operateInfo.objectType = objectType.Table;
-            operateInfo.objectUsed = createStmt.getTargetTable( )
-                    .toString( )
-                    .trim( );
-            operateInfo.usageType = usageType.Create;
+//            operateInfo.objectType = objectType.Table;
+//            operateInfo.objectUsed = createStmt.getTargetTable( )
+//                    .toString( )
+//                    .trim( );
+//            operateInfo.usageType = usageType.Create;
             for ( int i = 0; i < columns.size( ); i++ )
             {
                 TColumnDefinition column = columns.getColumn( i );
@@ -378,16 +270,32 @@ public class Analyze_SP
             procedureInfo.operates.add( operateInfo );
 
         }
+        else if ( stmt instanceof TTeradataLock)
+        {
+
+            TTeradataLock lockTableStmt = (TTeradataLock) stmt;
+            operateInfo operateInfo = new operateInfo( );
+//            operateInfo.objectType = objectType.Table;
+//            operateInfo.objectUsed = lockTableStmt.getObjectName( )
+//                    .toString( )
+//                    .trim( );
+//            operateInfo.usageType = usageType.Lock;
+
+            procedureInfo.operates.add( operateInfo );
+
+            if (lockTableStmt.getSqlRequest() != null)
+            {
+                analyzeSqlStatement(procedureInfo, lockTableStmt.getSqlRequest());
+            }
+        }
         else if ( stmt instanceof TInsertSqlStatement )
         {
             TInsertSqlStatement insertStmt = (TInsertSqlStatement) stmt;
             TObjectNameList columns = insertStmt.getColumnList( );
             operateInfo operateInfo = new operateInfo( );
-            operateInfo.objectType = objectType.Table;
-            operateInfo.objectUsed = insertStmt.getTargetTable( )
-                    .toString( )
-                    .trim( );
-            operateInfo.usageType = usageType.Insert;
+            operateInfo.tgtSchema = insertStmt.getTargetTable().getPrefixSchema().trim( );
+            operateInfo.tgtTable = insertStmt.getTargetTable().getName().trim( );
+            operateInfo.type = usageType.Insert;
             if ( columns != null )
             {
                 for ( int i = 0; i < columns.size( ); i++ )
@@ -398,35 +306,35 @@ public class Analyze_SP
             }
             procedureInfo.operates.add( operateInfo );
 
-            // if (insertStmt.ExecStmt != null)
-            // {
-            // analyzeSqlStatement(procedureInfo, insertStmt.ExecStmt);
-            // }
+             if (insertStmt.getSubQuery() != null)
+             {
+             analyzeSqlStatement(procedureInfo, insertStmt.getSubQuery());
+             }
         }
-        else if ( stmt instanceof TDb2WhileStmt)
-        {
-            TDb2WhileStmt insertStmt = (TDb2WhileStmt) stmt;
-            TExpression columns = insertStmt.getCondition( );
-            operateInfo operateInfo = new operateInfo( );
-            operateInfo.objectType = objectType.Table;
-            operateInfo.objectUsed = insertStmt.getTargetTable( )
-                    .toString( )
-                    .trim( );
-            operateInfo.usageType = usageType.Insert;
-
-                    operateInfo.columns.add( columns.toString());
-            procedureInfo.operates.add( operateInfo );
-        }
+//        else if ( stmt instanceof TDb2WhileStmt)
+//        {
+//            TDb2WhileStmt insertStmt = (TDb2WhileStmt) stmt;
+//            TExpression columns = insertStmt.getCondition( );
+//            operateInfo operateInfo = new operateInfo( );
+//            operateInfo.objectType = objectType.Table;
+//            operateInfo.objectUsed = insertStmt.getTargetTable( )
+//                    .toString( )
+//                    .trim( );
+//            operateInfo.usageType = usageType.Insert;
+//
+//                    operateInfo.columns.add( columns.toString());
+//            procedureInfo.operates.add( operateInfo );
+//        }
         else if ( stmt instanceof TUpdateSqlStatement )
         {
             TUpdateSqlStatement updateStmt = (TUpdateSqlStatement) stmt;
             TResultColumnList columns = updateStmt.getResultColumnList( );
             operateInfo operateInfo = new operateInfo( );
-            operateInfo.objectType = objectType.Table;
-            operateInfo.objectUsed = updateStmt.getTargetTable( )
-                    .toString( )
-                    .trim( );
-            operateInfo.usageType = usageType.Update;
+//            operateInfo.objectType = objectType.Table;
+//            operateInfo.objectUsed = updateStmt.getTargetTable( )
+//                    .toString( )
+//                    .trim( );
+//            operateInfo.usageType = usageType.Update;
             for ( int i = 0; i < columns.size( ); i++ )
             {
                 TResultColumn column = columns.getResultColumn( i );
@@ -440,33 +348,33 @@ public class Analyze_SP
         {
             TDeleteSqlStatement deleteStmt = (TDeleteSqlStatement) stmt;
             operateInfo operateInfo = new operateInfo( );
-            operateInfo.objectType = objectType.Table;
-            operateInfo.objectUsed = deleteStmt.getTargetTable( )
-                    .toString( )
-                    .trim( );
-            operateInfo.usageType = usageType.Delete;
+//            operateInfo.objectType = objectType.Table;
+//            operateInfo.objectUsed = deleteStmt.getTargetTable( )
+//                    .toString( )
+//                    .trim( );
+//            operateInfo.usageType = usageType.Delete;
             procedureInfo.operates.add( operateInfo );
         }
         else if ( stmt instanceof TMssqlDropTable )
         {
             TMssqlDropTable dropStmt = (TMssqlDropTable) stmt;
             operateInfo operateInfo = new operateInfo( );
-            operateInfo.objectType = objectType.Table;
-            operateInfo.objectUsed = dropStmt.getTargetTable( )
-                    .toString( )
-                    .trim( );
-            operateInfo.usageType = usageType.Drop;
+//            operateInfo.objectType = objectType.Table;
+//            operateInfo.objectUsed = dropStmt.getTargetTable( )
+//                    .toString( )
+//                    .trim( );
+//            operateInfo.usageType = usageType.Drop;
             procedureInfo.operates.add( operateInfo );
         }
         else if ( stmt instanceof TDropTableSqlStatement )
         {
             TDropTableSqlStatement dropStmt = (TDropTableSqlStatement) stmt;
             operateInfo operateInfo = new operateInfo( );
-            operateInfo.objectType = objectType.Table;
-            operateInfo.objectUsed = dropStmt.getTableName( )
-                    .toString( )
-                    .trim( );
-            operateInfo.usageType = usageType.Drop;
+//            operateInfo.objectType = objectType.Table;
+//            operateInfo.objectUsed = dropStmt.getTableName( )
+//                    .toString( )
+//                    .trim( );
+//            operateInfo.usageType = usageType.Drop;
             procedureInfo.operates.add( operateInfo );
         }
         else if ( stmt instanceof TSelectSqlStatement )
@@ -508,19 +416,24 @@ public class Analyze_SP
             for ( int i = 0; i < tableInfos.size( ); i++ )
             {
                 operateInfo operateInfo = new operateInfo( );
-                operateInfo.objectType = objectType.Table;
-                operateInfo.objectUsed = tableInfos.get( i ).toString( );
+
                 if ( tableInfos.get( i ).stmt instanceof TSelectSqlStatement
-                        && ( (TSelectSqlStatement) tableInfos.get( i ).stmt ).getIntoClause( ) != null )
-                    operateInfo.usageType = usageType.Insert;
-                else
-                    operateInfo.usageType = usageType.Read;
+                        && ( (TSelectSqlStatement) tableInfos.get( i ).stmt ).getIntoClause( ) != null ) {
+                    operateInfo.type = usageType.Insert;
+                    operateInfo.tgtSchema = tableInfos.get( i ).toString().split("\\.")[0];
+                    operateInfo.tgtTable = tableInfos.get( i ).toString( ).split("\\.")[1];
+                }
+                else {
+                    operateInfo.type = usageType.Select;
+                    operateInfo.srcSchema = tableInfos.get( i ).toString().split("\\.")[0];
+                    operateInfo.srcTable = tableInfos.get( i ).toString( ).split("\\.")[1];
+                }
                 if ( columnMap.containsKey( tableInfos.get( i ) ) )
                 {
                     for ( columnInfo column : (List<columnInfo>) columnMap.get( tableInfos.get( i ) ) )
                     {
                         operateInfo.columns.add( column.toString( ) );
-                        operateInfo.objectUsed = column.table.toString( );
+//                        operateInfo.objectUsed = column.table.toString( );
                     }
                 }
                 procedureInfo.operates.add( operateInfo );
@@ -528,107 +441,6 @@ public class Analyze_SP
         }
     }
 
-    protected void checkFunction( spInfo spInfo, TSourceTokenList tokenList )
-    {
-        for ( int i = 0; i < tokenList.size( ); i++ )
-        {
-            TSourceToken token = tokenList.get( i );
-            if ( token.getDbObjType( ) == TObjectName.ttobjFunctionName )
-            {
-                TParseTreeNodeList list = token.getNodesStartFromThisToken( );
-                for ( int j = 0; j < list.size( ); j++ )
-                {
-                    TParseTreeNode node = (TParseTreeNode) list.getElement( j );
-                    if ( node instanceof TFunctionCall )
-                    {
-                        builtInFunctionInfo function = new builtInFunctionInfo( );
-                        function.function = token.astext;
-                        function.lineNo = token.lineNo;
-                        function.columnNo = token.columnNo;
-                        TCustomSqlStatement stmt = token.stmt;
-                        if ( stmt == null )
-                        {
-                            boolean flag = false;
-                            for ( int k = token.posinlist - 1; k >= 0; k-- )
-                            {
-                                TSourceToken before = node.getGsqlparser( ).sourcetokenlist.get( k );
-                                if ( token.getNodesStartFromThisToken( ) != null )
-                                {
-                                    for ( int z = 0; z < before.getNodesStartFromThisToken( )
-                                            .size( ); z++ )
-                                    {
-                                        if ( before.getNodesStartFromThisToken( )
-                                                .getElement( z ) instanceof TCustomSqlStatement )
-                                        {
-                                            TCustomSqlStatement tempStmt = (TCustomSqlStatement) before.getNodesStartFromThisToken( )
-                                                    .getElement( z );
-                                            if ( tempStmt.getStartToken( ).posinlist <= token.posinlist
-                                                    && tempStmt.getEndToken( ).posinlist >= token.posinlist )
-                                            {
-                                                stmt = tempStmt;
-                                                flag = true;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                                if ( flag )
-                                    break;
-                            }
-                        }
-                        if ( stmt instanceof TInsertSqlStatement )
-                        {
-                            function.stmtType = usageType.Insert;
-                        }
-                        else if ( stmt instanceof TSelectSqlStatement )
-                        {
-                            function.stmtType = usageType.Read;
-                        }
-                        else if ( stmt instanceof TUpdateSqlStatement )
-                        {
-                            function.stmtType = usageType.Update;
-                        }
-                        else if ( stmt instanceof TDeleteSqlStatement )
-                        {
-                            function.stmtType = usageType.Delete;
-                        }
-                        else if ( stmt instanceof TMssqlDropTable )
-                        {
-                            function.stmtType = usageType.Drop;
-                        }
-                        else if ( stmt instanceof TDropTableSqlStatement )
-                        {
-                            function.stmtType = usageType.Drop;
-                        }
-                        else if ( stmt instanceof TMssqlExecute )
-                        {
-                            function.stmtType = usageType.Exec;
-                        }
-                        else if ( stmt instanceof TMssqlCreateProcedure )
-                        {
-                            function.stmtType = usageType.Create;
-                        }
-                        spInfo.functions.add( function );
-                    }
-                }
-            }
-        }
-    }
-
-    protected void checkTryCatchClause( procedureInfo procedureInfo,
-                                        TTeradataCreateProcedure procedure )
-    {
-        TSourceTokenList tokenList = procedure.sourcetokenlist;
-        for ( int i = 0; i < tokenList.size( ); i++ )
-        {
-            TSourceToken token = tokenList.get( i );
-            if ( token.tokentype == ETokenType.ttkeyword
-                    && token.astext.trim( ).equalsIgnoreCase( "try" ) )
-            {
-                procedureInfo.hasTryCatch = true;
-            }
-        }
-    }
 
     public String getDBObjectRelationsAnalysisResult( )
     {
@@ -650,20 +462,60 @@ public class Analyze_SP
                                 builder.append( "," );
                             }
                         }
-                        relationBuffer.append( spInfo.db == null ? ""
-                                : spInfo.db )
+//                        System.out.println( "Purpose"
+//                                + delimiter
+//                                + "Target schema"
+//                                + delimiter
+//                                + "Target table"
+//                                + delimiter
+//                                + "Src_schema"
+//                                + delimiter
+//                                + "Src_table"
+//                                + delimiter
+//                                + "Type"
+//                                + delimiter
+//                                + "Join type"
+//                                + delimiter
+//                                + "Where"
+//                                + delimiter
+//                                + "Set"
+//                                + delimiter
+//                                + "Src file name"
+//                                + delimiter
+//                                + "Call Params"
+//                                + delimiter
+//                                + "Columns"
+//                                + delimiter
+//                                + "Max_cdc_date" );
+
+                        relationBuffer
+                                .append(spInfo.purpose == null ? "" : spInfo.purpose)
+//                                .append(spInfo.db == null ? ""
+//                                : spInfo.db )
                                 .append( delimiter )
-                                .append( procedure.name )
+                                .append( info.tgtSchema == null ? "" : info.tgtSchema)
                                 .append( delimiter )
-                                .append( procedure.objectType )
+                                .append( info.tgtTable == null ? "" : info.tgtTable)
                                 .append( delimiter )
-                                .append( info.objectUsed )
+                                .append( info.srcSchema == null ? "" : info.srcSchema)
                                 .append( delimiter )
-                                .append( info.objectType )
+                                .append( info.srcTable == null ? "" : info.srcTable)
                                 .append( delimiter )
-                                .append( info.usageType )
+                                .append( info.type == null ? "" : info.type)
                                 .append( delimiter )
-                                .append( builder )
+                                .append( info.joinType == null ? "" : info.joinType)
+                                .append( delimiter )
+                                .append( info.where == null ? "" : info.where)
+                                .append( delimiter )
+                                .append( info.set == null ? "" : info.set)
+                                .append( delimiter )
+                                .append( spInfo.file == null ? "" : spInfo.file)
+                                .append( delimiter )
+                                .append( info.callParams == null ? "" : info.callParams)
+                                .append( delimiter )
+                                .append( info.columns )
+                                .append( delimiter )
+                                .append( spInfo.version == null ? "" : spInfo.version)
                                 .append( "\r\n" );
                     }
 
@@ -673,68 +525,6 @@ public class Analyze_SP
         return relationBuffer.toString( );
     }
 
-    public String getTryCatchClauseAnalysisResult( )
-    {
-        if ( tryCatchBuffer.length( ) == 0 && files != null )
-        {
-            for ( String file : files )
-            {
-                spInfo spInfo = (spInfo) spInfoMap.get( file );
-                for ( procedureInfo procedure : spInfo.procedures )
-                {
-                    tryCatchBuffer.append( new File( file ).getName( ) )
-                            .append( delimiter )
-                            .append( spInfo.db )
-                            .append( delimiter )
-                            .append( procedure.name )
-                            .append( delimiter )
-                            .append( procedure.hasTryCatch ? "Yes" : "No" )
-                            .append( "\r\n" );
-                }
-            }
-        }
-        return tryCatchBuffer.toString( );
-    }
-
-    public String getBuiltInFunctionAnalysisResult( )
-    {
-        if ( functionBuffer.length( ) == 0 && files != null )
-        {
-            for ( String file : files )
-            {
-                spInfo spInfo = (spInfo) spInfoMap.get( file );
-                for ( builtInFunctionInfo function : spInfo.functions )
-                {
-                    functionBuffer.append( new File( file ).getName( ) )
-                            .append( delimiter )
-                            .append( function.function )
-                            .append( delimiter )
-                            .append( function.lineNo )
-                            .append( delimiter )
-                            .append( function.columnNo )
-                            .append( delimiter )
-                            .append( function.stmtType )
-                            .append( "\r\n" );
-                }
-            }
-        }
-        return functionBuffer.toString( );
-    }
-
-    public void setCheckBuiltInFunction( boolean checkBuiltInFunction )
-    {
-        this.checkBuiltInFunction = checkBuiltInFunction;
-    }
-
-    public void setCheckDBObjectRelation( boolean checkObjectRelation )
-    {
-        this.checkObjectRelation = checkObjectRelation;
-    }
-
-    public void setCheckTryCatchClause( boolean checkTryCatchClause )
-    {
-        this.checkTryCatchClause = checkTryCatchClause;
-    }
 
     protected void tableTokensInStmt( List<columnInfo> columnInfos,
                                       List<tableInfo> tableInfos, TCustomSqlStatement stmt )
@@ -743,7 +533,7 @@ public class Analyze_SP
         {
             if ( stmt.tables.getTable( i ).isBaseTable( ) )
             {
-                if ( ( stmt.dbvendor == EDbVendor.dbvmssql )
+                if ( ( stmt.dbvendor == EDbVendor.dbvteradata )
                         && ( ( stmt.tables.getTable( i ).getFullName( ).equalsIgnoreCase( "deleted" ) ) || ( stmt.tables.getTable( i )
                         .getFullName( ).equalsIgnoreCase( "inserted" ) ) ) )
                 {
@@ -796,13 +586,6 @@ public class Analyze_SP
 
 }
 
-class builtInFunctionInfo
-{
-
-    public String function;
-    public long lineNo, columnNo;
-    public usageType stmtType;
-}
 
 class columnInfo
 {
@@ -816,31 +599,34 @@ class columnInfo
     }
 };
 
-enum objectType {
-    SP, Table
-};
 
 class operateInfo
 {
-
-    public String objectUsed;
-    public objectType objectType;
-    public usageType usageType;
+    public String tgtSchema;
+    public String tgtTable;
+    public String srcSchema;
+    public String srcTable;
+    public usageType type;
+    public joinType joinType;
+    public String where;
+    public String set;
+    public String callParams;
+//    public String objectUsed;
     public List<String> columns = new ArrayList<String>( );
 }
 
 class procedureInfo
 {
 
+
     public String name;
-    public objectType objectType;
+//    public objectType objectType;
     public List<operateInfo> operates = new ArrayList<operateInfo>( );
     public boolean hasTryCatch;
 
     public procedureInfo( String name )
     {
         this.name = name;
-        objectType = objectType.Table;
     }
 }
 
@@ -848,9 +634,9 @@ class spInfo
 {
 
     public String file;
-    public String db;
+    public String purpose;
+    public String version;
     public List<procedureInfo> procedures = new ArrayList<procedureInfo>( );
-    public List<builtInFunctionInfo> functions = new ArrayList<builtInFunctionInfo>( );
 }
 
 class tableInfo
@@ -867,5 +653,9 @@ class tableInfo
 }
 
 enum usageType {
-    Exec, Read, Insert, Update, Create, Delete, Drop, Call
+    Select, Insert, Update, Create, Delete, Drop, Call, Lock, Exec, Read
+}
+
+enum joinType{
+    inner, left, right, full
 }
