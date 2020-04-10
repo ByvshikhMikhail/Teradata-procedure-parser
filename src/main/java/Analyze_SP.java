@@ -86,6 +86,8 @@ public class Analyze_SP
                 + delimiter
                 + "Src_table"
                 + delimiter
+                + "Alias"
+                + delimiter
                 + "Type"
                 + delimiter
                 + "Join type"
@@ -419,6 +421,7 @@ public class Analyze_SP
                 operateInfo operateInfo = new operateInfo( );
                 operateInfo.joinType = tableInfos.get(i).joinType;
                 operateInfo.onCondition = tableInfos.get(i).onCondition;
+                operateInfo.alias = tableInfos.get(i).alias;
                 if ( tableInfos.get( i ).stmt instanceof TSelectSqlStatement
                         && ( (TSelectSqlStatement) tableInfos.get( i ).stmt ).getIntoClause( ) != null ) {
                     operateInfo.type = usageType.Insert;
@@ -517,6 +520,8 @@ public class Analyze_SP
                                 .append( delimiter )
                                 .append( info.srcTable == null ? "" : info.srcTable)
                                 .append( delimiter )
+                                .append( info.alias == null ? "" : info.alias)
+                                .append( delimiter )
                                 .append( info.type == null ? "" : info.type)
                                 .append( delimiter )
                                 .append( info.joinType == null ? "" : info.joinType)
@@ -569,6 +574,7 @@ public class Analyze_SP
                 }
                 tableInfo tableInfo = new tableInfo( );
                 tableInfo.fullName = stmt.tables.getTable( i ).getFullName( );
+                tableInfo.alias = stmt.tables.getTable( i ).getAliasName( );
                 tableInfos.add( tableInfo );
                 System.out.println("table info full name : " + tableInfo.fullName);
                 if(stmt.joins.getJoin(0).getJoinItems().size() != 0 & i <= stmt.joins.getJoin(0).getJoinItems().size()  ) {
@@ -649,6 +655,7 @@ class operateInfo
     public String tgtTable;
     public String srcSchema;
     public String srcTable;
+    public String alias;
     public usageType type;
     public joinType joinType;
     public String onCondition;
@@ -689,6 +696,7 @@ class tableInfo
     public String fullName;
     public joinType joinType;
     public String onCondition;
+    public String alias;
     public TCustomSqlStatement stmt;
 
     public String toString( )
