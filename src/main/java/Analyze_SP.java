@@ -422,6 +422,7 @@ public class Analyze_SP
                 operateInfo.joinType = tableInfos.get(i).joinType;
                 operateInfo.onCondition = tableInfos.get(i).onCondition;
                 operateInfo.alias = tableInfos.get(i).alias;
+                operateInfo.where = tableInfos.get(i).where;
                 if ( tableInfos.get( i ).stmt instanceof TSelectSqlStatement
                         && ( (TSelectSqlStatement) tableInfos.get( i ).stmt ).getIntoClause( ) != null ) {
                     operateInfo.type = usageType.Insert;
@@ -442,11 +443,7 @@ public class Analyze_SP
 //                        operateInfo.objectUsed = column.table.toString( );
                     }
                 }
-                if( selectStmt.getWhereClause() != null)
-                {
-//                    System.out.println("Where  " + selectStmt.getWhereClause());
-                    operateInfo.where = selectStmt.getWhereClause().toScript();
-                }
+
 
 
                 if( selectStmt.getJoins() != null)
@@ -576,6 +573,12 @@ public class Analyze_SP
                 tableInfo.fullName = stmt.tables.getTable( i ).getFullName( );
                 tableInfo.alias = stmt.tables.getTable( i ).getAliasName( );
                 tableInfos.add( tableInfo );
+                if( stmt.getWhereClause() != null)
+                {
+//                    System.out.println("Where  " + selectStmt.getWhereClause());
+                    tableInfo.where = stmt.getWhereClause().toScript();
+                }
+
                 System.out.println("table info full name : " + tableInfo.fullName);
                 if(stmt.joins.getJoin(0).getJoinItems().size() != 0 & i <= stmt.joins.getJoin(0).getJoinItems().size()  ) {
 
@@ -697,6 +700,7 @@ class tableInfo
     public joinType joinType;
     public String onCondition;
     public String alias;
+    public String where;
     public TCustomSqlStatement stmt;
 
     public String toString( )
