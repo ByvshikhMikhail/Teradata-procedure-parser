@@ -3,19 +3,11 @@
 import gudusoft.gsqlparser.*;
 import gudusoft.gsqlparser.nodes.*;
 import gudusoft.gsqlparser.stmt.*;
-import gudusoft.gsqlparser.stmt.db2.TDb2WhileStmt;
-import gudusoft.gsqlparser.stmt.mssql.TMssqlBlock;
-import gudusoft.gsqlparser.stmt.mssql.TMssqlCreateProcedure;
 import gudusoft.gsqlparser.stmt.mssql.TMssqlDeclare;
 import gudusoft.gsqlparser.stmt.mssql.TMssqlDropTable;
-import gudusoft.gsqlparser.stmt.mssql.TMssqlExecute;
-import gudusoft.gsqlparser.stmt.mssql.TMssqlIfElse;
 import gudusoft.gsqlparser.stmt.teradata.TTeradataLock;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.PrintStream;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -32,7 +24,7 @@ public class Analyze_SP
             System.out.println( "Usage: java Analyze_SP scriptfile [/o <output file path>] [/d <csv delimiter character>]" );
             return;
         }
-        System.out.println(args.toString());
+//        System.out.println(args.toString());
         List array = Arrays.asList( args );
         List<File> files = new ArrayList<File>( );
         for ( int i = 0; i < array.size( ); i++ )
@@ -105,19 +97,6 @@ public class Analyze_SP
                 + "Columns"
                 + delimiter
                 + "Max_cdc_date" );
-//            System.out.println( "DB of Anayzed Object"
-//                    + delimiter
-//                    + "Name of Analyzed Object"
-//                    + delimiter
-//                    + "Object Type"
-//                    + delimiter
-//                    + "Object Used"
-//                    + delimiter
-//                    + "Object Type"
-//                    + delimiter
-//                    + "Usage Type"
-//                    + delimiter
-//                    + "Columns" );
             System.out.println( impact.getDBObjectRelationsAnalysisResult( ) );
 
 
@@ -143,6 +122,43 @@ public class Analyze_SP
                 files.add( sqlFiles.get( i ).getAbsolutePath( ) );
                 spInfo sp = new spInfo( );
                 sp.file = sqlFiles.get( i ).getName( );
+                String fileAsString = null;
+                try {
+                    InputStream is = new FileInputStream(sqlFiles.get( i ).getAbsolutePath());
+                    BufferedReader buf = new BufferedReader(new InputStreamReader(is));
+
+                    String line = buf.readLine();
+                    StringBuilder sb = new StringBuilder();
+
+                    while (line != null) {
+                        sb.append(line).append("\n");
+                        line = buf.readLine();
+
+                        fileAsString = sb.toString();
+//                        System.out.println("Contents : " + fileAsString);
+                    }
+                }catch (IOException var1){
+                    System.out.println("Error read file  : " + var1.getMessage());
+                    var1.printStackTrace();
+                }
+
+
+                try {
+                    List splitFile = Arrays.asList(fileAsString.split("--"));
+                    for (int j = 0; j < splitFile.size(); j++){
+                        String comment =  splitFile.get(j).toString();
+                        if(comment.toLowerCase().contains("purpose")){
+                            System.out.println("Contents : " + comment);
+                            sp.purpose = comment.split(":")[1].trim();
+                        }
+                        //todo версионность доставать отсюда
+
+                    }
+                }catch (NullPointerException var2) {
+                    System.out.println("No purpose found in file  : " + var2.getMessage());
+                    var2.printStackTrace();
+                }
+
                 spInfoMap.put( sqlFiles.get( i ).getAbsolutePath( ), sp );
 
             }
@@ -199,14 +215,20 @@ public class Analyze_SP
                 }
             }
         }
+        else if (stmt instanceof TCommentOnSqlStmt)
+        {
+
+            System.out.println("Stmt : " + ((TCommentOnSqlStmt) stmt).getMessage());
+        }
+
         else if (stmt instanceof TCallStatement){
             TCallStatement call = (TCallStatement) stmt;
-            System.out.println("We inside");
+//            System.out.println("We inside");
             if ( call.getAncestorStmt( ) != null )
             {
-                System.out.println("Debug");
+//                System.out.println("Debug");
 
-                System.out.println(call.getArgs());
+//                System.out.println(call.getArgs());
                 operateInfo operateInfo = new operateInfo( );
 //                operateInfo.objectType = objectType.SP;
 //                operateInfo.objectUsed = call.getRoutineName()
@@ -416,8 +438,6 @@ public class Analyze_SP
 
             for ( int i = 0; i < tableInfos.size( ); i++ )
             {
-
-
                 operateInfo operateInfo = new operateInfo( );
                 operateInfo.joinType = tableInfos.get(i).joinType;
                 operateInfo.onCondition = tableInfos.get(i).onCondition;
@@ -442,14 +462,6 @@ public class Analyze_SP
                         operateInfo.columns.add( column.toString( ) );
 //                        operateInfo.objectUsed = column.table.toString( );
                     }
-                }
-
-
-
-                if( selectStmt.getJoins() != null)
-                {
-//                    System.out.println("Where  " + selectStmt.getJoins());
-//                    operateInfo.where = selectStmt.getWhereClause().toScript();
                 }
 
                 procedureInfo.operates.add( operateInfo );
@@ -478,36 +490,8 @@ public class Analyze_SP
                                 builder.append( "," );
                             }
                         }
-//                        System.out.println( "Purpose"
-//                                + delimiter
-//                                + "Target schema"
-//                                + delimiter
-//                                + "Target table"
-//                                + delimiter
-//                                + "Src_schema"
-//                                + delimiter
-//                                + "Src_table"
-//                                + delimiter
-//                                + "Type"
-//                                + delimiter
-//                                + "Join type"
-//                                + delimiter
-//                                + "Where"
-//                                + delimiter
-//                                + "Set"
-//                                + delimiter
-//                                + "Src file name"
-//                                + delimiter
-//                                + "Call Params"
-//                                + delimiter
-//                                + "Columns"
-//                                + delimiter
-//                                + "Max_cdc_date" );
-
                         relationBuffer
                                 .append(spInfo.purpose == null ? "" : spInfo.purpose)
-//                                .append(spInfo.db == null ? ""
-//                                : spInfo.db )
                                 .append( delimiter )
                                 .append( info.tgtSchema == null ? "" : info.tgtSchema)
                                 .append( delimiter )
@@ -579,14 +563,14 @@ public class Analyze_SP
                     tableInfo.where = stmt.getWhereClause().toScript();
                 }
 
-                System.out.println("table info full name : " + tableInfo.fullName);
+//                System.out.println("table info full name : " + tableInfo.fullName);
                 if(stmt.joins.getJoin(0).getJoinItems().size() != 0 & i <= stmt.joins.getJoin(0).getJoinItems().size()  ) {
 
                     for(int j = 0; j < stmt.joins.getJoin(0).getJoinItems().size(); j++){
                         if(stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getTable().equals(stmt.tables.getTable(i))){
 //                            System.out.println("Joins " + stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getJoinType());
                             String join = stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getJoinType().toString();
-                            System.out.println("OnCondition " + stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getOnCondition().toString());
+//                            System.out.println("OnCondition " + stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getOnCondition().toString());
                             tableInfo.onCondition = stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getOnCondition().toScript().replace("\\n", "");
                             switch (join) {
                                 case "inner" :
@@ -674,7 +658,6 @@ class procedureInfo
 
 
     public String name;
-//    public objectType objectType;
     public List<operateInfo> operates = new ArrayList<operateInfo>( );
     public boolean hasTryCatch;
 
