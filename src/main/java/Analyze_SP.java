@@ -68,6 +68,8 @@ public class Analyze_SP {
                 + delimiter
                 + "Type target"
                 + delimiter
+                + "Target columns"
+                + delimiter
                 + "Src_schema"
                 + delimiter
                 + "Src_table"
@@ -391,8 +393,12 @@ public class Analyze_SP {
                 operateInfo.where = tableInfos.get(i).where;
                 if (selectStmt.getParentStmt() != null) {
                     String parentNumber = stmtNumbers.get(selectStmt.getParentStmt().hashCode()).toString();
-                    pri("parent ", parentNumber);
                     operateInfo.operateInfoNumber = parentNumber + "_" + tableInfos.get(i).tableNumber;
+                    for(int j = 0; j < selectStmt.getParentStmt().getTargetTable().getLinkedColumns().size(); j++){
+//                        pri("j", selectStmt.getParentStmt().getTargetTable().getLinkedColumns().getObjectName(j).toString());
+                        operateInfo.tgtcolumns.add(selectStmt.getParentStmt().getTargetTable().getLinkedColumns().getObjectName(j).toString());
+
+                    }
                     operateInfo.tgtSchema = tableInfos.get(i).toString().split("\\.")[0];
                     operateInfo.tgtTable = tableInfos.get(i).toString().split("\\.")[1];
                     operateInfo.typeTarget = selectStmt.getParentStmt().sqlstatementtype.name().replace("sst", "");
@@ -428,6 +434,12 @@ public class Analyze_SP {
                                 builder.append(",");
                             }
                         }
+                        for (int i = 0; i < info.tgtcolumns.size(); i++) {
+                            builder.append(info.tgtcolumns.get(i));
+                            if (i < info.tgtcolumns.size() - 1) {
+                                builder.append(",");
+                            }
+                        }
                         relationBuffer
                                 .append(info.operateInfoNumber == null ? "" : info.operateInfoNumber)
                                 .append(delimiter)
@@ -438,6 +450,8 @@ public class Analyze_SP {
                                 .append(info.tgtTable == null ? "" : info.tgtTable)
                                 .append(delimiter)
                                 .append(info.typeTarget == null ? "" : info.typeTarget)
+                                .append(delimiter)
+                                .append(info.tgtcolumns)
                                 .append(delimiter)
                                 .append(info.srcSchema == null ? "" : info.srcSchema)
                                 .append(delimiter)
@@ -474,8 +488,8 @@ public class Analyze_SP {
 
     protected void tableTokensInStmt(List<columnInfo> columnInfos,
                                      List<tableInfo> tableInfos, TCustomSqlStatement stmt) {
+        
         for (int i = 0; i < stmt.getStatements().size(); i++) {
-
             tableTokensInStmt(columnInfos, tableInfos, stmt.getStatements()
                     .get(i));
         }
@@ -568,8 +582,8 @@ public class Analyze_SP {
         }
     }
 
-    void pri (String k, String v) { System.out.println(k +"="+ v); }
-    void pri (String k, int v) { System.out.println(k +"="+ Integer.toString(v)); }
+    void pri (String k, String v) { System.out.println(k +" = "+ v); }
+    void pri (String k, int v) { System.out.println(k +" = "+ Integer.toString(v)); }
 
 }
 
@@ -601,6 +615,7 @@ class operateInfo {
     public String callParams;
     //    public String objectUsed;
     public List<String> columns = new ArrayList<String>();
+    public List<String> tgtcolumns = new ArrayList<String>();
 }
 
 class procedureInfo {
