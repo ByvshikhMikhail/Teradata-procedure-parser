@@ -179,7 +179,7 @@ public class Analyze_SP {
     protected void analyzeSQL(spInfo spInfo, TGSqlParser sqlparser ) {
         procedureInfo procedureInfo = new procedureInfo();
         spInfo.procedures.add(procedureInfo);
-        System.out.println("sqlparser.sqlstatements.size()" + sqlparser.sqlstatements.size());
+//        System.out.println("sqlparser.sqlstatements.size()" + sqlparser.sqlstatements.size());
         for (int i = 0; i < sqlparser.sqlstatements.size(); i++) {
             TCustomSqlStatement sql = sqlparser.sqlstatements.get(i);
             if (procedureInfo != null) {
@@ -357,7 +357,11 @@ public class Analyze_SP {
             TSelectSqlStatement selectStmt = (TSelectSqlStatement) stmt;
             List<columnInfo> columnInfos = new ArrayList<columnInfo>();
             List<tableInfo> tableInfos = new ArrayList<tableInfo>();
-            tableTokensInStmt(columnInfos, tableInfos, selectStmt);
+            String parentNumber = "";
+            if (selectStmt.getParentStmt() != null) {
+                parentNumber = stmtNumbers.get(selectStmt.getParentStmt().hashCode()).toString();
+            }
+            tableTokensInStmt(columnInfos, tableInfos, selectStmt, parentNumber, 1);
             Map columnMap = new HashMap();
 
             for (int i = 0; i < columnInfos.size(); i++) {
@@ -385,15 +389,13 @@ public class Analyze_SP {
             }
 
             for (int i = 0; i < tableInfos.size(); i++) {
-
                 operateInfo operateInfo = new operateInfo();
                 operateInfo.joinType = tableInfos.get(i).joinType;
                 operateInfo.onCondition = tableInfos.get(i).onCondition;
                 operateInfo.alias = tableInfos.get(i).alias;
                 operateInfo.where = tableInfos.get(i).where;
                 if (selectStmt.getParentStmt() != null) {
-                    String parentNumber = stmtNumbers.get(selectStmt.getParentStmt().hashCode()).toString();
-                    operateInfo.operateInfoNumber = parentNumber + "_" + tableInfos.get(i).tableNumber;
+                    operateInfo.operateInfoNumber = tableInfos.get(i).tableNumber;
                     for(int j = 0; j < selectStmt.getParentStmt().getTargetTable().getLinkedColumns().size(); j++){
 //                        pri("j", selectStmt.getParentStmt().getTargetTable().getLinkedColumns().getObjectName(j).toString());
                         operateInfo.tgtcolumns.add(selectStmt.getParentStmt().getTargetTable().getLinkedColumns().getObjectName(j).toString());
@@ -487,11 +489,12 @@ public class Analyze_SP {
 
 
     protected void tableTokensInStmt(List<columnInfo> columnInfos,
-                                     List<tableInfo> tableInfos, TCustomSqlStatement stmt) {
-        
+                                     List<tableInfo> tableInfos, TCustomSqlStatement stmt, String parentNumber, int subLvl) {
+        stmtNumbers.put(stmt.hashCode(), parentNumber + "_" + subLvl);
         for (int i = 0; i < stmt.getStatements().size(); i++) {
+
             tableTokensInStmt(columnInfos, tableInfos, stmt.getStatements()
-                    .get(i));
+                    .get(i), parentNumber, subLvl + 1);
         }
         for (int i = 0; i < stmt.tables.size(); i++) {
             if (stmt.tables.getTable(i).isBaseTable()) {
@@ -508,27 +511,16 @@ public class Analyze_SP {
                 tableInfo.fullName = stmt.tables.getTable(i).getFullName();
                 tableInfo.alias = stmt.tables.getTable(i).getAliasName();
                 tableInfo.tableNumber = Integer.toString(i + 1);
+                if (stmt.getParentStmt() != null) {
+                    String myParentNumber = stmtNumbers.get(stmt.getParentStmt().hashCode()).toString();
+                    tableInfo.tableNumber = myParentNumber + "_" + Integer.toString(i + 1);
+                }
                 tableInfos.add(tableInfo);
                 if (stmt.getWhereClause() != null) {
-//                    System.out.println("Where  " + selectStmt.getWhereClause());
                     tableInfo.where = stmt.getWhereClause().toScript();
                 }
 
-//                if(stmt.getParentStmt()!=null){
-//                    if(stmt.getParentStmt().getTargetTable().)
-//                        if (columns != null) {
-//                            for (int i = 0; i < columns.size(); i++) {
-//                                TObjectName column = columns.getObjectName(i);
-//                                operateInfo.columns.add(column.toString());
-//                            }
-//                        }
-//                }
-
-
-//                System.out.println("table info full name : " + tableInfo.fullName);
                 if (stmt.joins.getJoin(0).getJoinItems().size() != 0 & i <= stmt.joins.getJoin(0).getJoinItems().size()) {
-
-
                     for (int j = 0; j < stmt.joins.getJoin(0).getJoinItems().size(); j++) {
                         if (stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getTable().equals(stmt.tables.getTable(i))) {
                             String join = stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getJoinType().toString();
