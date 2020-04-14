@@ -183,19 +183,19 @@ public class Analyze_SP {
         for (int i = 0; i < sqlparser.sqlstatements.size(); i++) {
             TCustomSqlStatement sql = sqlparser.sqlstatements.get(i);
             if (procedureInfo != null) {
-                analyzeSqlStatement(procedureInfo, sql, i + 1, 0);
+                analyzeSqlStatement(procedureInfo, sql, i + 1);
             }
         }
     }
 
     private void analyzeSqlStatement(procedureInfo procedureInfo,
-                                     TCustomSqlStatement stmt, int numberStmt , int subLvl) {
+                                     TCustomSqlStatement stmt, int numberStmt) {
         if (stmt instanceof TBlockSqlStatement) {
             TBlockSqlStatement block = (TBlockSqlStatement) stmt;
             if (block.getBodyStatements() != null) {
                 for (int i = 0; i < block.getBodyStatements().size(); i++) {
                     analyzeSqlStatement(procedureInfo,
-                            block.getBodyStatements().get(i), numberStmt, subLvl +1);
+                            block.getBodyStatements().get(i), numberStmt);
                 }
             }
 //        } else if (stmt instanceof TCommentOnSqlStmt) {
@@ -281,7 +281,7 @@ public class Analyze_SP {
             operateInfo operateInfo = new operateInfo();
             if (insertStmt.getSubQuery() != null) {
 //                procedureInfo.operates.add(operateInfo);
-                analyzeSqlStatement(procedureInfo, insertStmt.getSubQuery(), numberStmt, subLvl +1);
+                analyzeSqlStatement(procedureInfo, insertStmt.getSubQuery(), numberStmt);
             } else {
                 procedureInfo.operates.add(operateInfo);
                 operateInfo.tgtSchema = insertStmt.getTargetTable().getPrefixSchema().trim();
@@ -401,8 +401,8 @@ public class Analyze_SP {
                         operateInfo.tgtcolumns.add(selectStmt.getParentStmt().getTargetTable().getLinkedColumns().getObjectName(j).toString());
 
                     }
-                    operateInfo.tgtSchema = tableInfos.get(i).toString().split("\\.")[0];
-                    operateInfo.tgtTable = tableInfos.get(i).toString().split("\\.")[1];
+                    operateInfo.tgtSchema = selectStmt.getParentStmt().getTargetTable().getFullName().split("\\.")[0];
+                    operateInfo.tgtTable = selectStmt.getParentStmt().getTargetTable().getFullName().split("\\.")[1];
                     operateInfo.typeTarget = selectStmt.getParentStmt().sqlstatementtype.name().replace("sst", "");
                 }
                 operateInfo.srcSchema = tableInfos.get(i).toString().split("\\.")[0];
@@ -489,12 +489,12 @@ public class Analyze_SP {
 
 
     protected void tableTokensInStmt(List<columnInfo> columnInfos,
-                                     List<tableInfo> tableInfos, TCustomSqlStatement stmt, String parentNumber, int subLvl) {
-        stmtNumbers.put(stmt.hashCode(), parentNumber + "_" + subLvl);
+                                     List<tableInfo> tableInfos, TCustomSqlStatement stmt, String parentNumber, int subNum) {
+        stmtNumbers.put(stmt.hashCode(), parentNumber + "_" + subNum);
         for (int i = 0; i < stmt.getStatements().size(); i++) {
 
             tableTokensInStmt(columnInfos, tableInfos, stmt.getStatements()
-                    .get(i), parentNumber, subLvl + 1);
+                    .get(i), parentNumber, subNum + 1);
         }
         for (int i = 0; i < stmt.tables.size(); i++) {
             if (stmt.tables.getTable(i).isBaseTable()) {
@@ -612,12 +612,8 @@ class operateInfo {
 
 class procedureInfo {
 
-
-    public String procedureNumber;
     public List<operateInfo> operates = new ArrayList<operateInfo>();
-
-    public procedureInfo() {
-    }
+    public procedureInfo() {}
 }
 // file info
 class spInfo {
