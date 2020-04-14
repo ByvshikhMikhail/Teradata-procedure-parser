@@ -1,871 +1,648 @@
 
 
-import gudusoft.gsqlparser.EDbVendor;
-import gudusoft.gsqlparser.ETableEffectType;
-import gudusoft.gsqlparser.ETokenType;
-import gudusoft.gsqlparser.TCustomSqlStatement;
-import gudusoft.gsqlparser.TGSqlParser;
-import gudusoft.gsqlparser.TSourceToken;
-import gudusoft.gsqlparser.TSourceTokenList;
+import gudusoft.gsqlparser.*;
 import gudusoft.gsqlparser.nodes.*;
 import gudusoft.gsqlparser.stmt.*;
-import gudusoft.gsqlparser.stmt.db2.TDb2WhileStmt;
-import gudusoft.gsqlparser.stmt.mssql.TMssqlBlock;
-import gudusoft.gsqlparser.stmt.mssql.TMssqlCreateProcedure;
 import gudusoft.gsqlparser.stmt.mssql.TMssqlDeclare;
 import gudusoft.gsqlparser.stmt.mssql.TMssqlDropTable;
-import gudusoft.gsqlparser.stmt.mssql.TMssqlExecute;
-import gudusoft.gsqlparser.stmt.mssql.TMssqlIfElse;
-import gudusoft.gsqlparser.stmt.mysql.TMySQLWhileStmt;
-import gudusoft.gsqlparser.stmt.teradata.TTeradataCreateProcedure;
+import gudusoft.gsqlparser.stmt.teradata.TTeradataLock;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.PrintStream;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class Analyze_SP
-{
+public class Analyze_SP {
 
-    public static void main( String[] args )
-    {
-        if ( args.length == 0 )
-        {
-
-            System.out.println( "Usage: java Analyze_SP scriptfile [/o <output file path>] [/d <csv delimiter character>]" );
-            System.out.println( "/o: Option, write the output stream to the specified file." );
-            System.out.println( "/d: Option, set the csv delimiter character. The default delimiter character instanceof '|'." );
-            System.out.println( "/a: Option, check all items." );
-            System.out.println( "/r: Option, check the database object relations in the store procedure." );
-            System.out.println( "/f: Option, check the built-in functions in the store procedure." );
-            System.out.println( "/t: Option, check if the store procedure contains try catch clause." );
+    public static void main(String[] args) {
+        if (args.length == 0) {
+            System.out.println("Usage: java Analyze_SP scriptfile [/o <output file path>] [/d <csv delimiter character>]");
             return;
         }
-        System.out.println(args.toString());
-        List array = Arrays.asList( args );
-
-        List<File> files = new ArrayList<File>( );
-
-        for ( int i = 0; i < array.size( ); i++ )
-        {
-            File file = new File( array.get( i ).toString( ) );
-            if ( file.exists( ) )
-                files.add( file );
+//        System.out.println(args.toString());
+        List array = Arrays.asList(args);
+        List<File> files = new ArrayList<File>();
+        for (int i = 0; i < array.size(); i++) {
+            File file = new File(array.get(i).toString());
+            if (file.exists())
+                files.add(file);
             else
                 break;
         }
 
         String outputFile = null;
-
-        int index = array.indexOf( "/o" );
-
-        if ( index != -1 && args.length > index + 1 )
-        {
+        int index = array.indexOf("/o");
+        if (index != -1 && args.length > index + 1) {
             outputFile = args[index + 1];
         }
-
         String delimiter = "|";
-
-        index = array.indexOf( "/d" );
-
-        if ( index != -1 && args.length > index + 1 )
-        {
+        index = array.indexOf("/d");
+        if (index != -1 && args.length > index + 1) {
             delimiter = args[index + 1];
         }
 
-        boolean checkTryCatchClause = false;
-        boolean checkBuiltInFunction = false;
-        boolean checkDBObjectRelations = false;
-
-        if ( array.indexOf( "/a" ) != -1 )
-        {
-            checkTryCatchClause = true;
-            checkBuiltInFunction = true;
-            checkDBObjectRelations = true;
-        }
-        else
-        {
-            if ( array.indexOf( "/f" ) != -1 )
-            {
-                checkBuiltInFunction = true;
-            }
-            if ( array.indexOf( "/t" ) != -1 )
-            {
-                checkTryCatchClause = true;
-            }
-            if ( array.indexOf( "/r" ) != -1 )
-            {
-                checkDBObjectRelations = true;
-            }
-        }
-
-        if ( checkBuiltInFunction == false && checkTryCatchClause == false )
-        {
-            checkDBObjectRelations = true;
-        }
-
-        Analyze_SP impact = new Analyze_SP( files, delimiter );
-        impact.setCheckBuiltInFunction( checkBuiltInFunction );
-        impact.setCheckTryCatchClause( checkTryCatchClause );
-        impact.setCheckDBObjectRelation( checkDBObjectRelations );
-        impact.analyzeSQL( );
+        Analyze_SP impact = new Analyze_SP(files, delimiter);
+        impact.analyzeSQL();
 
         PrintStream writer = null;
-        if ( outputFile != null )
-        {
-            try
-            {
-                writer = new PrintStream( new FileOutputStream( outputFile,
-                        false ) );
-                System.setOut( writer );
-            }
-            catch ( FileNotFoundException e )
-            {
-                e.printStackTrace( );
+        if (outputFile != null) {
+            try {
+                writer = new PrintStream(new FileOutputStream(outputFile,
+                        false));
+                System.setOut(writer);
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
             }
 
         }
 
-        if ( impact.checkObjectRelation )
-        {
-            System.out.println( "DB of Anayzed Object"
-                    + delimiter
-                    + "Name of Analyzed Object"
-                    + delimiter
-                    + "Object Type"
-                    + delimiter
-                    + "Object Used"
-                    + delimiter
-                    + "Object Type"
-                    + delimiter
-                    + "Usage Type"
-                    + delimiter
-                    + "Columns" );
-            System.out.println( impact.getDBObjectRelationsAnalysisResult( ) );
-        }
-        if ( impact.checkBuiltInFunction )
-        {
-            System.out.println( "File Name"
-                    + delimiter
-                    + "Built-in Function"
-                    + delimiter
-                    + "Line Number"
-                    + delimiter
-                    + "Column Number"
-                    + delimiter
-                    + "Usage Type"
-                    + delimiter );
-            System.out.println( impact.getBuiltInFunctionAnalysisResult( ) );
-        }
-        if ( impact.checkTryCatchClause )
-        {
-            System.out.println( "File Name"
-                    + delimiter
-                    + "DB of Anayzed Object"
-                    + delimiter
-                    + "Procedure"
-                    + delimiter
-                    + "With Try Catch" );
-            System.out.println( impact.getTryCatchClauseAnalysisResult( ) );
-        }
+        System.out.println("Number"
+                + delimiter
+                + "Purpose"
+                + delimiter
+                + "Target schema"
+                + delimiter
+                + "Target table"
+                + delimiter
+                + "Type target"
+                + delimiter
+                + "Target columns"
+                + delimiter
+                + "Src_schema"
+                + delimiter
+                + "Src_table"
+                + delimiter
+                + "Alias"
+                + delimiter
+                + "Type"
+                + delimiter
+                + "Join type"
+                + delimiter
+                + "on Condition"
+                + delimiter
+                + "Where"
+                + delimiter
+                + "Set"
+                + delimiter
+                + "Src file name"
+                + delimiter
+                + "Call Params"
+                + delimiter
+                + "Columns"
+                + delimiter
+                + "Max_cdc_date");
+        System.out.println(impact.getDBObjectRelationsAnalysisResult());
 
-        if ( writer != null )
-        {
-            writer.close( );
+
+        if (writer != null) {
+            writer.close();
         }
 
     }
 
-    private StringBuilder relationBuffer = new StringBuilder( );
-    private StringBuilder functionBuffer = new StringBuilder( );
-    private StringBuilder tryCatchBuffer = new StringBuilder( );
-    private Map spInfoMap = new HashMap( );
-    private List<String> files = new ArrayList<String>( );
+    private StringBuilder relationBuffer = new StringBuilder();
+    private Map spInfoMap = new HashMap();
+    private Map stmtNumbers = new HashMap();
+    private List<String> files = new ArrayList<String>();
     private String delimiter;
-    private boolean checkBuiltInFunction, checkTryCatchClause,
-            checkObjectRelation;
 
-    public Analyze_SP( List<File> sqlFiles, String delimiter )
-    {
+    public Analyze_SP(List<File> sqlFiles, String delimiter) {
         this.delimiter = delimiter;
-        if ( sqlFiles.size( ) > 0 )
-        {
-            for ( int i = 0; i < sqlFiles.size( ); i++ )
-            {
-                files.add( sqlFiles.get( i ).getAbsolutePath( ) );
-                spInfo sp = new spInfo( );
-                sp.file = sqlFiles.get( i ).getAbsolutePath( );
-//                procedureInfo procedureName = new procedureInfo( );
-//                procedureName.name = sp.file;
-//                sp.procedures.add(procedureName);
-                spInfoMap.put( sqlFiles.get( i ).getAbsolutePath( ), sp );
+        if (sqlFiles.size() > 0) {
+            for (int i = 0; i < sqlFiles.size(); i++) {
+                files.add(sqlFiles.get(i).getAbsolutePath());
+                spInfo sp = new spInfo();
+                sp.file = sqlFiles.get(i).getName();
+                String fileAsString = null;
+                try {
+                    InputStream is = new FileInputStream(sqlFiles.get(i).getAbsolutePath());
+                    BufferedReader buf = new BufferedReader(new InputStreamReader(is));
+
+                    String line = buf.readLine();
+                    StringBuilder sb = new StringBuilder();
+
+                    while (line != null) {
+                        sb.append(line).append("\n");
+                        line = buf.readLine();
+
+                        fileAsString = sb.toString();
+//                        System.out.println("Contents : " + fileAsString);
+                    }
+                } catch (IOException var1) {
+                    System.out.println("Error read file  : " + var1.getMessage());
+                    var1.printStackTrace();
+                }
+
+
+                try {
+                    List splitFile = Arrays.asList(fileAsString.split("--"));
+                    for (int j = 0; j < splitFile.size(); j++) {
+                        String comment = splitFile.get(j).toString();
+                        if (comment.toLowerCase().contains("purpose")) {
+                            System.out.println("Contents : " + comment);
+                            sp.purpose = comment.split(":")[1].trim();
+                        }
+                        //todo версионность доставать отсюда
+
+                    }
+                } catch (NullPointerException var2) {
+                    System.out.println("No purpose found in file  : " + var2.getMessage());
+                    var2.printStackTrace();
+                }
+
+                spInfoMap.put(sqlFiles.get(i).getAbsolutePath(), sp);
 
             }
         }
     }
 
-    void analyzeProcedure( procedureInfo procedureInfo,
-                           TTeradataCreateProcedure procedure )
-    {
-        for ( int i = 0; i < procedure.getStatements( ).size( ); i++ )
-        {
-            TCustomSqlStatement stmt = procedure.getStatements( ).get( i );
-            analyzeSqlStatement( procedureInfo, stmt );
-        }
-    }
 
-    public void analyzeSQL( )
-    {
-        for ( int i = 0; i < files.size( ); i++ )
-        {
-            TGSqlParser sqlparser = new TGSqlParser( EDbVendor.dbvteradata );
-            sqlparser.sqlfilename = files.get( i );
-            int ret = sqlparser.parse( );
-            if ( ret != 0 )
-            {
-                System.out.println( "Parse file "
+    public void analyzeSQL() {
+        for (int i = 0; i < files.size(); i++) {
+            TGSqlParser sqlparser = new TGSqlParser(EDbVendor.dbvteradata);
+            sqlparser.sqlfilename = files.get(i);
+            int ret = sqlparser.parse();
+            if (ret != 0) {
+                System.out.println("Parse file "
                         + sqlparser.sqlfilename
-                        + " failed." );
-                System.out.println( sqlparser.getErrormessage( ) );
+                        + " failed.");
+                System.out.println(sqlparser.getErrormessage());
                 continue;
             }
-            spInfo sp = (spInfo) spInfoMap.get( files.get( i ) );
-            analyzeSQL( sp, sqlparser );
+            spInfo sp = (spInfo) spInfoMap.get(files.get(i));
+            analyzeSQL(sp, sqlparser);
         }
     }
 
-    protected void analyzeSQL( spInfo spInfo, TGSqlParser sqlparser )
-    {
-        procedureInfo procedureInfo = new procedureInfo( spInfo.file);
-        spInfo.procedures.add( procedureInfo );
-        for ( int i = 0; i < sqlparser.sqlstatements.size( ); i++ )
-        {
-            TCustomSqlStatement sql = sqlparser.sqlstatements.get( i );
-            if ( sql instanceof TUseDatabase )
-            {
-                spInfo.db = ( (TUseDatabase) sql ).getDatabaseName( )
-                        .toString( );
-            }
-//            else if ( sql instanceof TMErge )
-            else if (sql instanceof TTeradataCreateProcedure)
-            {
-
-                procedureInfo.name = ( (TTeradataCreateProcedure) sql ).getProcedureName( )
-                        .toString( );
-                procedureInfo.objectType = objectType.SP;
-                if ( checkObjectRelation )
-                {
-                    analyzeProcedure( procedureInfo,
-                            (TTeradataCreateProcedure) sql );
-                }
-                if ( checkTryCatchClause )
-                {
-                    checkTryCatchClause( procedureInfo,
-                            (TTeradataCreateProcedure) sql );
-                }
-            }
-            else if ( procedureInfo != null )
-            {
-                analyzeSqlStatement( procedureInfo, sql );
-            }
-
-            if ( checkBuiltInFunction )
-            {
-                checkFunction( spInfo, sql.sourcetokenlist );
+    protected void analyzeSQL(spInfo spInfo, TGSqlParser sqlparser ) {
+        procedureInfo procedureInfo = new procedureInfo();
+        spInfo.procedures.add(procedureInfo);
+//        System.out.println("sqlparser.sqlstatements.size()" + sqlparser.sqlstatements.size());
+        for (int i = 0; i < sqlparser.sqlstatements.size(); i++) {
+            TCustomSqlStatement sql = sqlparser.sqlstatements.get(i);
+            if (procedureInfo != null) {
+                analyzeSqlStatement(procedureInfo, sql, i + 1);
             }
         }
     }
 
-    private void analyzeSqlStatement( procedureInfo procedureInfo,
-                                      TCustomSqlStatement stmt )
-    {
-        if ( stmt instanceof TMssqlBlock )
-        {
-            TMssqlBlock block = (TMssqlBlock) stmt;
-            if ( block.getBodyStatements( ) != null )
-            {
-                for ( int i = 0; i < block.getBodyStatements( ).size( ); i++ )
-                {
-                    analyzeSqlStatement( procedureInfo,
-                            block.getBodyStatements( ).get( i ) );
+    private void analyzeSqlStatement(procedureInfo procedureInfo,
+                                     TCustomSqlStatement stmt, int numberStmt) {
+        if (stmt instanceof TBlockSqlStatement) {
+            TBlockSqlStatement block = (TBlockSqlStatement) stmt;
+            if (block.getBodyStatements() != null) {
+                for (int i = 0; i < block.getBodyStatements().size(); i++) {
+                    analyzeSqlStatement(procedureInfo,
+                            block.getBodyStatements().get(i), numberStmt);
                 }
             }
-        }
-        else if (stmt instanceof TCallStatement){
-            TCallStatement call = (TCallStatement) stmt;
-            System.out.println("We inside");
-            if ( call.getAncestorStmt( ) != null )
-            {
-                System.out.println("Debug");
-//                System.out.println(call.getAncestorStmt( ));
-//                System.out.println(call.getRoutineName());
-                System.out.println(call.getArgs());
-//                System.out.println(call.getParameterList());
-//                analyzeSqlStatement( procedureInfo, call.getAncestorStmt( ) );
-                operateInfo operateInfo = new operateInfo( );
-                operateInfo.objectType = objectType.SP;
-                operateInfo.objectUsed = call.getRoutineName()
-                        .toString( )
-                        .trim( );
-                operateInfo.usageType = usageType.Call;
-//                List<columnInfo> columns = (List<columnInfo>) columnMap.get( table );
-                TExecParameterList columns = call.getParameterList();
-                for ( int i = 0; i < columns.size( ); i++ )
-                {
-                    TExecParameter column = columns.getExecParameter( i );
-                    operateInfo.columns.add( column.getParameterValue( ).toString( ) );
-                }
-                procedureInfo.operates.add( operateInfo );
-            }
-        }
-        else if ( stmt instanceof TMssqlIfElse )
-        {
-            TMssqlIfElse ifElse = (TMssqlIfElse) stmt;
-            if ( ifElse.getStmt( ) != null )
-            {
-                analyzeSqlStatement( procedureInfo, ifElse.getStmt( ) );
-            }
-            if ( ifElse.getCondition( ) != null )
-            {
-
-            }
-            if ( ifElse.getElseStmt( ) != null )
-            {
-                analyzeSqlStatement( procedureInfo, ifElse.getElseStmt( ) );
-            }
-        }
-        else if ( stmt instanceof TMssqlDeclare )
-        {
-            TMssqlDeclare declareStmt = (TMssqlDeclare) stmt;
-            if ( declareStmt.getSubquery( ) != null
-                    && declareStmt.getSubquery( ).toString( ).trim( ).length( ) > 0 )
-            {
-                analyzeSqlStatement( procedureInfo, declareStmt.getSubquery( ) );
-            }
-        }
-        else if ( stmt instanceof TMssqlExecute
-                && ( (TMssqlExecute) stmt ).getModuleName( ) != null )
-        {
-            TMssqlExecute executeStmt = (TMssqlExecute) stmt;
-            operateInfo operateInfo = new operateInfo( );
-            operateInfo.objectType = objectType.SP;
-            operateInfo.objectUsed = executeStmt.getModuleName( )
-                    .toString( )
-                    .trim( );
-            operateInfo.usageType = usageType.Exec;
-            procedureInfo.operates.add( operateInfo );
-        }
-        else if ( stmt instanceof TCreateTableSqlStatement )
-        {
-            TCreateTableSqlStatement createStmt = (TCreateTableSqlStatement) stmt;
-            TColumnDefinitionList columns = createStmt.getColumnList( );
-            operateInfo operateInfo = new operateInfo( );
-            operateInfo.objectType = objectType.Table;
-            operateInfo.objectUsed = createStmt.getTargetTable( )
-                    .toString( )
-                    .trim( );
-            operateInfo.usageType = usageType.Create;
-            for ( int i = 0; i < columns.size( ); i++ )
-            {
-                TColumnDefinition column = columns.getColumn( i );
-                operateInfo.columns.add( column.getColumnName( ).toString( ) );
-            }
-            procedureInfo.operates.add( operateInfo );
-
-        }
-        else if ( stmt instanceof TInsertSqlStatement )
-        {
+//        } else if (stmt instanceof TCommentOnSqlStmt) {
+//
+//            System.out.println("Stmt : " + ((TCommentOnSqlStmt) stmt).getMessage());
+//        } else if (stmt instanceof TCallStatement) {
+//            TCallStatement call = (TCallStatement) stmt;
+////            System.out.println("We inside");
+//            if (call.getAncestorStmt() != null) {
+////                System.out.println("Debug");
+//
+////                System.out.println(call.getArgs());
+//                operateInfo operateInfo = new operateInfo();
+////                operateInfo.objectType = objectType.SP;
+////                operateInfo.objectUsed = call.getRoutineName()
+////                        .toString( )
+////                        .trim( );
+////                operateInfo.usageType = usageType.Call;
+//                TExecParameterList columns = call.getParameterList();
+//                for (int i = 0; i < columns.size(); i++) {
+//                    TExecParameter column = columns.getExecParameter(i);
+//                    operateInfo.columns.add(column.getParameterValue().toString());
+//                }
+//                procedureInfo.operates.add(operateInfo);
+//            }
+//        }
+//        //TODO исправить if else, ошибки почти гарантированы
+//        else if (stmt instanceof TIfStmt) {
+//
+//            TIfStmt ifElse = (TIfStmt) stmt;
+//            if (ifElse.getThenStatements() != null) {
+//                analyzeSqlStatement(procedureInfo, ifElse.getAncestorStmt());
+//            }
+//            if (ifElse.getCondition() != null) {
+//
+//            }
+//
+//            if (ifElse.getElseStatements() != null) {
+//                analyzeSqlStatement(procedureInfo, ifElse.getTopStatement());
+//            }
+//        } else if (stmt instanceof TMssqlDeclare) {
+//            TMssqlDeclare declareStmt = (TMssqlDeclare) stmt;
+//            if (declareStmt.getSubquery() != null
+//                    && declareStmt.getSubquery().toString().trim().length() > 0) {
+//                analyzeSqlStatement(procedureInfo, declareStmt.getSubquery());
+//            }
+//        } else if (stmt instanceof TCreateTableSqlStatement) {
+//            TCreateTableSqlStatement createStmt = (TCreateTableSqlStatement) stmt;
+//            TColumnDefinitionList columns = createStmt.getColumnList();
+//            operateInfo operateInfo = new operateInfo();
+////            operateInfo.objectType = objectType.Table;
+////            operateInfo.objectUsed = createStmt.getTargetTable( )
+////                    .toString( )
+////                    .trim( );
+////            operateInfo.usageType = usageType.Create;
+//            for (int i = 0; i < columns.size(); i++) {
+//                TColumnDefinition column = columns.getColumn(i);
+//                operateInfo.columns.add(column.getColumnName().toString());
+//            }
+//            procedureInfo.operates.add(operateInfo);
+//
+//        } else if (stmt instanceof TTeradataLock) {
+//
+//            TTeradataLock lockTableStmt = (TTeradataLock) stmt;
+//            operateInfo operateInfo = new operateInfo();
+////            operateInfo.objectType = objectType.Table;
+////            operateInfo.objectUsed = lockTableStmt.getObjectName( )
+////                    .toString( )
+////                    .trim( );
+////            operateInfo.usageType = usageType.Lock;
+//
+//            procedureInfo.operates.add(operateInfo);
+//
+//            if (lockTableStmt.getSqlRequest() != null) {
+//                analyzeSqlStatement(procedureInfo, lockTableStmt.getSqlRequest());
+//            }
+        } else if (stmt instanceof TInsertSqlStatement) {
             TInsertSqlStatement insertStmt = (TInsertSqlStatement) stmt;
-            TObjectNameList columns = insertStmt.getColumnList( );
-            operateInfo operateInfo = new operateInfo( );
-            operateInfo.objectType = objectType.Table;
-            operateInfo.objectUsed = insertStmt.getTargetTable( )
-                    .toString( )
-                    .trim( );
-            operateInfo.usageType = usageType.Insert;
-            if ( columns != null )
-            {
-                for ( int i = 0; i < columns.size( ); i++ )
-                {
-                    TObjectName column = columns.getObjectName( i );
-                    operateInfo.columns.add( column.toString( ) );
+            TObjectNameList columns = insertStmt.getColumnList();
+            if(stmt.getParentStmt() == null) {
+                stmtNumbers.put(stmt.hashCode(), Integer.toString(numberStmt));
+            }
+            operateInfo operateInfo = new operateInfo();
+            if (insertStmt.getSubQuery() != null) {
+//                procedureInfo.operates.add(operateInfo);
+                analyzeSqlStatement(procedureInfo, insertStmt.getSubQuery(), numberStmt);
+            } else {
+                procedureInfo.operates.add(operateInfo);
+                operateInfo.tgtSchema = insertStmt.getTargetTable().getPrefixSchema().trim();
+                operateInfo.tgtTable = insertStmt.getTargetTable().getName().trim();
+                operateInfo.type = usageType.Insert;
+                if (columns != null) {
+                    for (int i = 0; i < columns.size(); i++) {
+                        TObjectName column = columns.getObjectName(i);
+                        operateInfo.columns.add(column.toString());
+                    }
                 }
             }
-            procedureInfo.operates.add( operateInfo );
-
-            // if (insertStmt.ExecStmt != null)
-            // {
-            // analyzeSqlStatement(procedureInfo, insertStmt.ExecStmt);
-            // }
         }
-        else if ( stmt instanceof TDb2WhileStmt)
-        {
-            TDb2WhileStmt insertStmt = (TDb2WhileStmt) stmt;
-            TExpression columns = insertStmt.getCondition( );
-            operateInfo operateInfo = new operateInfo( );
-            operateInfo.objectType = objectType.Table;
-            operateInfo.objectUsed = insertStmt.getTargetTable( )
-                    .toString( )
-                    .trim( );
-            operateInfo.usageType = usageType.Insert;
-
-                    operateInfo.columns.add( columns.toString());
-            procedureInfo.operates.add( operateInfo );
-        }
-        else if ( stmt instanceof TUpdateSqlStatement )
-        {
-            TUpdateSqlStatement updateStmt = (TUpdateSqlStatement) stmt;
-            TResultColumnList columns = updateStmt.getResultColumnList( );
-            operateInfo operateInfo = new operateInfo( );
-            operateInfo.objectType = objectType.Table;
-            operateInfo.objectUsed = updateStmt.getTargetTable( )
-                    .toString( )
-                    .trim( );
-            operateInfo.usageType = usageType.Update;
-            for ( int i = 0; i < columns.size( ); i++ )
-            {
-                TResultColumn column = columns.getResultColumn( i );
-                operateInfo.columns.add( column.getExpr( )
-                        .getLeftOperand( )
-                        .toString( ) );
-            }
-            procedureInfo.operates.add( operateInfo );
-        }
-        else if ( stmt instanceof TDeleteSqlStatement )
-        {
-            TDeleteSqlStatement deleteStmt = (TDeleteSqlStatement) stmt;
-            operateInfo operateInfo = new operateInfo( );
-            operateInfo.objectType = objectType.Table;
-            operateInfo.objectUsed = deleteStmt.getTargetTable( )
-                    .toString( )
-                    .trim( );
-            operateInfo.usageType = usageType.Delete;
-            procedureInfo.operates.add( operateInfo );
-        }
-        else if ( stmt instanceof TMssqlDropTable )
-        {
-            TMssqlDropTable dropStmt = (TMssqlDropTable) stmt;
-            operateInfo operateInfo = new operateInfo( );
-            operateInfo.objectType = objectType.Table;
-            operateInfo.objectUsed = dropStmt.getTargetTable( )
-                    .toString( )
-                    .trim( );
-            operateInfo.usageType = usageType.Drop;
-            procedureInfo.operates.add( operateInfo );
-        }
-        else if ( stmt instanceof TDropTableSqlStatement )
-        {
-            TDropTableSqlStatement dropStmt = (TDropTableSqlStatement) stmt;
-            operateInfo operateInfo = new operateInfo( );
-            operateInfo.objectType = objectType.Table;
-            operateInfo.objectUsed = dropStmt.getTableName( )
-                    .toString( )
-                    .trim( );
-            operateInfo.usageType = usageType.Drop;
-            procedureInfo.operates.add( operateInfo );
-        }
-        else if ( stmt instanceof TSelectSqlStatement )
-        {
+//        else if ( stmt instanceof TDb2WhileStmt)
+//        {
+//            TDb2WhileStmt insertStmt = (TDb2WhileStmt) stmt;
+//            TExpression columns = insertStmt.getCondition( );
+//            operateInfo operateInfo = new operateInfo( );
+//            operateInfo.objectType = objectType.Table;
+//            operateInfo.objectUsed = insertStmt.getTargetTable( )
+//                    .toString( )
+//                    .trim( );
+//            operateInfo.usageType = usageType.Insert;
+//
+//                    operateInfo.columns.add( columns.toString());
+//            procedureInfo.operates.add( operateInfo );
+//        }
+//        else if (stmt instanceof TUpdateSqlStatement) {
+//            TUpdateSqlStatement updateStmt = (TUpdateSqlStatement) stmt;
+//            TResultColumnList columns = updateStmt.getResultColumnList();
+//            operateInfo operateInfo = new operateInfo();
+//            operateInfo.objectType = objectType.Table;
+//            operateInfo.objectUsed = updateStmt.getTargetTable( )
+//                    .toString( )
+//                    .trim( );
+//            operateInfo.usageType = usageType.Update;
+//            for (int i = 0; i < columns.size(); i++) {
+//                TResultColumn column = columns.getResultColumn(i);
+//                operateInfo.columns.add(column.getExpr()
+//                        .getLeftOperand()
+//                        .toString());
+////            }
+//            procedureInfo.operates.add(operateInfo);
+//        } else if (stmt instanceof TDeleteSqlStatement) {
+//            TDeleteSqlStatement deleteStmt = (TDeleteSqlStatement) stmt;
+//            operateInfo operateInfo = new operateInfo();
+//            operateInfo.objectType = objectType.Table;
+//            operateInfo.objectUsed = deleteStmt.getTargetTable( )
+//                    .toString( )
+//                    .trim( );
+//            operateInfo.usageType = usageType.Delete;
+//            procedureInfo.operates.add(operateInfo);
+//        } else if (stmt instanceof TMssqlDropTable) {
+//            TMssqlDropTable dropStmt = (TMssqlDropTable) stmt;
+//            operateInfo operateInfo = new operateInfo();
+//            operateInfo.objectType = objectType.Table;
+//            operateInfo.objectUsed = dropStmt.getTargetTable( )
+//                    .toString( )
+//                    .trim( );
+//            operateInfo.usageType = usageType.Drop;
+//            procedureInfo.operates.add(operateInfo);
+//        } else if (stmt instanceof TDropTableSqlStatement) {
+//            TDropTableSqlStatement dropStmt = (TDropTableSqlStatement) stmt;
+//            operateInfo operateInfo = new operateInfo();
+//            operateInfo.objectType = objectType.Table;
+//            operateInfo.objectUsed = dropStmt.getTableName( )
+//                    .toString( )
+//                    .trim( );
+//            operateInfo.usageType = usageType.Drop;
+//            procedureInfo.operates.add(operateInfo);
+//        }
+        else if (stmt instanceof TSelectSqlStatement) {
             TSelectSqlStatement selectStmt = (TSelectSqlStatement) stmt;
-            List<columnInfo> columnInfos = new ArrayList<columnInfo>( );
-            List<tableInfo> tableInfos = new ArrayList<tableInfo>( );
-            tableTokensInStmt( columnInfos, tableInfos, selectStmt );
-            Map columnMap = new HashMap( );
-            for ( int i = 0; i < columnInfos.size( ); i++ )
-            {
-                columnInfo column = columnInfos.get( i );
+            List<columnInfo> columnInfos = new ArrayList<columnInfo>();
+            List<tableInfo> tableInfos = new ArrayList<tableInfo>();
+            String parentNumber = "";
+            if (selectStmt.getParentStmt() != null) {
+                parentNumber = stmtNumbers.get(selectStmt.getParentStmt().hashCode()).toString();
+            }
+            tableTokensInStmt(columnInfos, tableInfos, selectStmt, parentNumber, 1);
+            Map columnMap = new HashMap();
+
+            for (int i = 0; i < columnInfos.size(); i++) {
+
+                columnInfo column = columnInfos.get(i);
                 tableInfo table = column.table;
-                if ( columnMap.containsKey( table ) )
-                {
-                    List<columnInfo> columns = (List<columnInfo>) columnMap.get( table );
+                if (columnMap.containsKey(table)) {
+                    List<columnInfo> columns = (List<columnInfo>) columnMap.get(table);
                     boolean flag = false;
-                    for ( columnInfo temp : columns )
-                    {
-                        if ( temp.toString( )
-                                .equalsIgnoreCase( column.toString( ) ) )
-                        {
+                    for (columnInfo temp : columns) {
+                        if (temp.toString()
+                                .equalsIgnoreCase(column.toString())) {
                             flag = true;
                             break;
                         }
                     }
-                    if ( !flag )
-                    {
-                        columns.add( column );
+                    if (!flag) {
+                        columns.add(column);
                     }
-                }
-                else
-                {
-                    List<columnInfo> columns = new ArrayList<columnInfo>( );
-                    columnMap.put( table, columns );
-                    columns.add( column );
+                } else {
+                    List<columnInfo> columns = new ArrayList<columnInfo>();
+                    columnMap.put(table, columns);
+                    columns.add(column);
                 }
             }
-            for ( int i = 0; i < tableInfos.size( ); i++ )
-            {
-                operateInfo operateInfo = new operateInfo( );
-                operateInfo.objectType = objectType.Table;
-                operateInfo.objectUsed = tableInfos.get( i ).toString( );
-                if ( tableInfos.get( i ).stmt instanceof TSelectSqlStatement
-                        && ( (TSelectSqlStatement) tableInfos.get( i ).stmt ).getIntoClause( ) != null )
-                    operateInfo.usageType = usageType.Insert;
-                else
-                    operateInfo.usageType = usageType.Read;
-                if ( columnMap.containsKey( tableInfos.get( i ) ) )
-                {
-                    for ( columnInfo column : (List<columnInfo>) columnMap.get( tableInfos.get( i ) ) )
-                    {
-                        operateInfo.columns.add( column.toString( ) );
-                        operateInfo.objectUsed = column.table.toString( );
+
+            for (int i = 0; i < tableInfos.size(); i++) {
+                operateInfo operateInfo = new operateInfo();
+                operateInfo.joinType = tableInfos.get(i).joinType;
+                operateInfo.onCondition = tableInfos.get(i).onCondition;
+                operateInfo.alias = tableInfos.get(i).alias;
+                operateInfo.where = tableInfos.get(i).where;
+                if (selectStmt.getParentStmt() != null) {
+                    operateInfo.operateInfoNumber = tableInfos.get(i).tableNumber;
+                    for(int j = 0; j < selectStmt.getParentStmt().getTargetTable().getLinkedColumns().size(); j++){
+//                        pri("j", selectStmt.getParentStmt().getTargetTable().getLinkedColumns().getObjectName(j).toString());
+                        operateInfo.tgtcolumns.add(selectStmt.getParentStmt().getTargetTable().getLinkedColumns().getObjectName(j).toString());
+
+                    }
+                    operateInfo.tgtSchema = selectStmt.getParentStmt().getTargetTable().getFullName().split("\\.")[0];
+                    operateInfo.tgtTable = selectStmt.getParentStmt().getTargetTable().getFullName().split("\\.")[1];
+                    operateInfo.typeTarget = selectStmt.getParentStmt().sqlstatementtype.name().replace("sst", "");
+                }
+                operateInfo.srcSchema = tableInfos.get(i).toString().split("\\.")[0];
+                operateInfo.srcTable = tableInfos.get(i).toString().split("\\.")[1];
+                operateInfo.type = usageType.Select;
+                if (columnMap.containsKey(tableInfos.get(i))) {
+                    for (columnInfo column : (List<columnInfo>) columnMap.get(tableInfos.get(i))) {
+                        operateInfo.columns.add(column.toString());
+//                        operateInfo.objectUsed = column.table.toString( );
                     }
                 }
-                procedureInfo.operates.add( operateInfo );
+
+                procedureInfo.operates.add(operateInfo);
             }
         }
     }
 
-    protected void checkFunction( spInfo spInfo, TSourceTokenList tokenList )
-    {
-        for ( int i = 0; i < tokenList.size( ); i++ )
-        {
-            TSourceToken token = tokenList.get( i );
-            if ( token.getDbObjType( ) == TObjectName.ttobjFunctionName )
-            {
-                TParseTreeNodeList list = token.getNodesStartFromThisToken( );
-                for ( int j = 0; j < list.size( ); j++ )
-                {
-                    TParseTreeNode node = (TParseTreeNode) list.getElement( j );
-                    if ( node instanceof TFunctionCall )
-                    {
-                        builtInFunctionInfo function = new builtInFunctionInfo( );
-                        function.function = token.astext;
-                        function.lineNo = token.lineNo;
-                        function.columnNo = token.columnNo;
-                        TCustomSqlStatement stmt = token.stmt;
-                        if ( stmt == null )
-                        {
-                            boolean flag = false;
-                            for ( int k = token.posinlist - 1; k >= 0; k-- )
-                            {
-                                TSourceToken before = node.getGsqlparser( ).sourcetokenlist.get( k );
-                                if ( token.getNodesStartFromThisToken( ) != null )
-                                {
-                                    for ( int z = 0; z < before.getNodesStartFromThisToken( )
-                                            .size( ); z++ )
-                                    {
-                                        if ( before.getNodesStartFromThisToken( )
-                                                .getElement( z ) instanceof TCustomSqlStatement )
-                                        {
-                                            TCustomSqlStatement tempStmt = (TCustomSqlStatement) before.getNodesStartFromThisToken( )
-                                                    .getElement( z );
-                                            if ( tempStmt.getStartToken( ).posinlist <= token.posinlist
-                                                    && tempStmt.getEndToken( ).posinlist >= token.posinlist )
-                                            {
-                                                stmt = tempStmt;
-                                                flag = true;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                                if ( flag )
+
+    public String getDBObjectRelationsAnalysisResult() {
+        if (relationBuffer.length() == 0 && files != null) {
+            for (String file : files) {
+                spInfo spInfo = (spInfo) spInfoMap.get(file);
+                for (procedureInfo procedure : spInfo.procedures) {
+
+                    for (operateInfo info : procedure.operates) {
+
+                        StringBuilder builder = new StringBuilder();
+                        for (int i = 0; i < info.columns.size(); i++) {
+                            builder.append(info.columns.get(i));
+                            if (i < info.columns.size() - 1) {
+                                builder.append(",");
+                            }
+                        }
+                        for (int i = 0; i < info.tgtcolumns.size(); i++) {
+                            builder.append(info.tgtcolumns.get(i));
+                            if (i < info.tgtcolumns.size() - 1) {
+                                builder.append(",");
+                            }
+                        }
+                        relationBuffer
+                                .append(info.operateInfoNumber == null ? "" : info.operateInfoNumber)
+                                .append(delimiter)
+                                .append(spInfo.purpose == null ? "" : spInfo.purpose)
+                                .append(delimiter)
+                                .append(info.tgtSchema == null ? "" : info.tgtSchema)
+                                .append(delimiter)
+                                .append(info.tgtTable == null ? "" : info.tgtTable)
+                                .append(delimiter)
+                                .append(info.typeTarget == null ? "" : info.typeTarget)
+                                .append(delimiter)
+                                .append(info.tgtcolumns)
+                                .append(delimiter)
+                                .append(info.srcSchema == null ? "" : info.srcSchema)
+                                .append(delimiter)
+                                .append(info.srcTable == null ? "" : info.srcTable)
+                                .append(delimiter)
+                                .append(info.alias == null ? "" : info.alias)
+                                .append(delimiter)
+                                .append(info.type == null ? "" : info.type)
+                                .append(delimiter)
+                                .append(info.joinType == null ? "" : info.joinType)
+                                .append(delimiter)
+                                .append(info.onCondition == null ? "" : info.onCondition)
+                                .append(delimiter)
+                                .append(info.where == null ? "" : info.where)
+                                .append(delimiter)
+                                .append(info.set == null ? "" : info.set)
+                                .append(delimiter)
+                                .append(spInfo.file == null ? "" : spInfo.file)
+                                .append(delimiter)
+                                .append(info.callParams == null ? "" : info.callParams)
+                                .append(delimiter)
+                                .append(info.columns)
+                                .append(delimiter)
+                                .append(spInfo.version == null ? "" : spInfo.version)
+                                .append("\r\n");
+                    }
+
+                }
+            }
+        }
+        return relationBuffer.toString();
+    }
+
+
+    protected void tableTokensInStmt(List<columnInfo> columnInfos,
+                                     List<tableInfo> tableInfos, TCustomSqlStatement stmt, String parentNumber, int subNum) {
+        stmtNumbers.put(stmt.hashCode(), parentNumber + "_" + subNum);
+        for (int i = 0; i < stmt.getStatements().size(); i++) {
+
+            tableTokensInStmt(columnInfos, tableInfos, stmt.getStatements()
+                    .get(i), parentNumber, subNum + 1);
+        }
+        for (int i = 0; i < stmt.tables.size(); i++) {
+            if (stmt.tables.getTable(i).isBaseTable()) {
+                if ((stmt.dbvendor == EDbVendor.dbvteradata)
+                        && ((stmt.tables.getTable(i).getFullName().equalsIgnoreCase("deleted")) || (stmt.tables.getTable(i)
+                        .getFullName().equalsIgnoreCase("inserted")))) {
+                    continue;
+                }
+
+                if (stmt.tables.getTable(i).getEffectType() == ETableEffectType.tetSelectInto) {
+                    continue;
+                }
+                tableInfo tableInfo = new tableInfo();
+                tableInfo.fullName = stmt.tables.getTable(i).getFullName();
+                tableInfo.alias = stmt.tables.getTable(i).getAliasName();
+                tableInfo.tableNumber = Integer.toString(i + 1);
+                if (stmt.getParentStmt() != null) {
+                    String myParentNumber = stmtNumbers.get(stmt.getParentStmt().hashCode()).toString();
+                    tableInfo.tableNumber = myParentNumber + "_" + Integer.toString(i + 1);
+                }
+                tableInfos.add(tableInfo);
+                if (stmt.getWhereClause() != null) {
+                    tableInfo.where = stmt.getWhereClause().toScript();
+                }
+
+                if (stmt.joins.getJoin(0).getJoinItems().size() != 0 & i <= stmt.joins.getJoin(0).getJoinItems().size()) {
+                    for (int j = 0; j < stmt.joins.getJoin(0).getJoinItems().size(); j++) {
+                        if (stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getTable().equals(stmt.tables.getTable(i))) {
+                            String join = stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getJoinType().toString();
+                            tableInfo.onCondition = stmt.joins.getJoin(0).getJoinItems().getJoinItem(j).getOnCondition().toScript().replace("\\n", "");
+                            switch (join) {
+                                case "inner":
+                                    tableInfo.joinType = joinType.inner;
+                                    break;
+                                case "left":
+                                    tableInfo.joinType = joinType.left;
+                                    break;
+                                case "right":
+                                    tableInfo.joinType = joinType.right;
+                                    break;
+                                case "full":
+                                    tableInfo.joinType = joinType.full;
                                     break;
                             }
                         }
-                        if ( stmt instanceof TInsertSqlStatement )
-                        {
-                            function.stmtType = usageType.Insert;
-                        }
-                        else if ( stmt instanceof TSelectSqlStatement )
-                        {
-                            function.stmtType = usageType.Read;
-                        }
-                        else if ( stmt instanceof TUpdateSqlStatement )
-                        {
-                            function.stmtType = usageType.Update;
-                        }
-                        else if ( stmt instanceof TDeleteSqlStatement )
-                        {
-                            function.stmtType = usageType.Delete;
-                        }
-                        else if ( stmt instanceof TMssqlDropTable )
-                        {
-                            function.stmtType = usageType.Drop;
-                        }
-                        else if ( stmt instanceof TDropTableSqlStatement )
-                        {
-                            function.stmtType = usageType.Drop;
-                        }
-                        else if ( stmt instanceof TMssqlExecute )
-                        {
-                            function.stmtType = usageType.Exec;
-                        }
-                        else if ( stmt instanceof TMssqlCreateProcedure )
-                        {
-                            function.stmtType = usageType.Create;
-                        }
-                        spInfo.functions.add( function );
+                    }
+                }else{
+                    if(stmt.tables.getTable(i).isBaseTable()){
+                        tableInfo.joinType = joinType.main;
                     }
                 }
-            }
-        }
-    }
 
-    protected void checkTryCatchClause( procedureInfo procedureInfo,
-                                        TTeradataCreateProcedure procedure )
-    {
-        TSourceTokenList tokenList = procedure.sourcetokenlist;
-        for ( int i = 0; i < tokenList.size( ); i++ )
-        {
-            TSourceToken token = tokenList.get( i );
-            if ( token.tokentype == ETokenType.ttkeyword
-                    && token.astext.trim( ).equalsIgnoreCase( "try" ) )
-            {
-                procedureInfo.hasTryCatch = true;
-            }
-        }
-    }
+                for (int j = 0; j < stmt.tables.getTable(i)
+                        .getLinkedColumns()
+                        .size(); j++) {
 
-    public String getDBObjectRelationsAnalysisResult( )
-    {
-        if ( relationBuffer.length( ) == 0 && files != null )
-        {
-            for ( String file : files )
-            {
-                spInfo spInfo = (spInfo) spInfoMap.get( file );
-                for ( procedureInfo procedure : spInfo.procedures )
-                {
-                    for ( operateInfo info : procedure.operates )
-                    {
-                        StringBuilder builder = new StringBuilder( );
-                        for ( int i = 0; i < info.columns.size( ); i++ )
-                        {
-                            builder.append( info.columns.get( i ) );
-                            if ( i < info.columns.size( ) - 1 )
-                            {
-                                builder.append( "," );
-                            }
-                        }
-                        relationBuffer.append( spInfo.db == null ? ""
-                                : spInfo.db )
-                                .append( delimiter )
-                                .append( procedure.name )
-                                .append( delimiter )
-                                .append( procedure.objectType )
-                                .append( delimiter )
-                                .append( info.objectUsed )
-                                .append( delimiter )
-                                .append( info.objectType )
-                                .append( delimiter )
-                                .append( info.usageType )
-                                .append( delimiter )
-                                .append( builder )
-                                .append( "\r\n" );
-                    }
-
-                }
-            }
-        }
-        return relationBuffer.toString( );
-    }
-
-    public String getTryCatchClauseAnalysisResult( )
-    {
-        if ( tryCatchBuffer.length( ) == 0 && files != null )
-        {
-            for ( String file : files )
-            {
-                spInfo spInfo = (spInfo) spInfoMap.get( file );
-                for ( procedureInfo procedure : spInfo.procedures )
-                {
-                    tryCatchBuffer.append( new File( file ).getName( ) )
-                            .append( delimiter )
-                            .append( spInfo.db )
-                            .append( delimiter )
-                            .append( procedure.name )
-                            .append( delimiter )
-                            .append( procedure.hasTryCatch ? "Yes" : "No" )
-                            .append( "\r\n" );
-                }
-            }
-        }
-        return tryCatchBuffer.toString( );
-    }
-
-    public String getBuiltInFunctionAnalysisResult( )
-    {
-        if ( functionBuffer.length( ) == 0 && files != null )
-        {
-            for ( String file : files )
-            {
-                spInfo spInfo = (spInfo) spInfoMap.get( file );
-                for ( builtInFunctionInfo function : spInfo.functions )
-                {
-                    functionBuffer.append( new File( file ).getName( ) )
-                            .append( delimiter )
-                            .append( function.function )
-                            .append( delimiter )
-                            .append( function.lineNo )
-                            .append( delimiter )
-                            .append( function.columnNo )
-                            .append( delimiter )
-                            .append( function.stmtType )
-                            .append( "\r\n" );
-                }
-            }
-        }
-        return functionBuffer.toString( );
-    }
-
-    public void setCheckBuiltInFunction( boolean checkBuiltInFunction )
-    {
-        this.checkBuiltInFunction = checkBuiltInFunction;
-    }
-
-    public void setCheckDBObjectRelation( boolean checkObjectRelation )
-    {
-        this.checkObjectRelation = checkObjectRelation;
-    }
-
-    public void setCheckTryCatchClause( boolean checkTryCatchClause )
-    {
-        this.checkTryCatchClause = checkTryCatchClause;
-    }
-
-    protected void tableTokensInStmt( List<columnInfo> columnInfos,
-                                      List<tableInfo> tableInfos, TCustomSqlStatement stmt )
-    {
-        for ( int i = 0; i < stmt.tables.size( ); i++ )
-        {
-            if ( stmt.tables.getTable( i ).isBaseTable( ) )
-            {
-                if ( ( stmt.dbvendor == EDbVendor.dbvmssql )
-                        && ( ( stmt.tables.getTable( i ).getFullName( ).equalsIgnoreCase( "deleted" ) ) || ( stmt.tables.getTable( i )
-                        .getFullName( ).equalsIgnoreCase( "inserted" ) ) ) )
-                {
-                    continue;
-                }
-
-                if ( stmt.tables.getTable( i ).getEffectType( ) == ETableEffectType.tetSelectInto )
-                {
-                    continue;
-                }
-                tableInfo tableInfo = new tableInfo( );
-                tableInfo.fullName = stmt.tables.getTable( i ).getFullName( );
-                tableInfos.add( tableInfo );
-
-                for ( int j = 0; j < stmt.tables.getTable( i )
-                        .getLinkedColumns( )
-                        .size( ); j++ )
-                {
-
-                    columnInfo columnInfo = new columnInfo( );
+                    columnInfo columnInfo = new columnInfo();
                     columnInfo.table = tableInfo;
-                    columnInfo.column = stmt.tables.getTable( i )
-                            .getLinkedColumns( )
-                            .getObjectName( j );
-                    columnInfos.add( columnInfo );
+                    columnInfo.column = stmt.tables.getTable(i)
+                            .getLinkedColumns()
+                            .getObjectName(j);
+                    columnInfos.add(columnInfo);
                 }
             }
         }
 
-        if ( stmt instanceof TSelectSqlStatement
-                && ( (TSelectSqlStatement) stmt ).getIntoClause( ) != null )
-        {
-            TExpressionList tables = ( (TSelectSqlStatement) stmt ).getIntoClause( )
-                    .getExprList( );
-            for ( int j = 0; j < tables.size( ); j++ )
-            {
-                tableInfo tableInfo = new tableInfo( );
-                tableInfo.fullName = tables.getExpression( j ).toString( );
+        if (stmt instanceof TSelectSqlStatement
+                && ((TSelectSqlStatement) stmt).getIntoClause() != null) {
+            TExpressionList tables = ((TSelectSqlStatement) stmt).getIntoClause()
+                    .getExprList();
+            for (int j = 0; j < tables.size(); j++) {
+                tableInfo tableInfo = new tableInfo();
+                tableInfo.fullName = tables.getExpression(j).toString();
                 tableInfo.stmt = stmt;
-                tableInfos.add( tableInfo );
+                tableInfos.add(tableInfo);
             }
-        }
-
-        for ( int i = 0; i < stmt.getStatements( ).size( ); i++ )
-        {
-            tableTokensInStmt( columnInfos, tableInfos, stmt.getStatements( )
-                    .get( i ) );
         }
     }
 
+    void pri (String k, String v) { System.out.println(k +" = "+ v); }
+    void pri (String k, int v) { System.out.println(k +" = "+ Integer.toString(v)); }
+
 }
 
-class builtInFunctionInfo
-{
 
-    public String function;
-    public long lineNo, columnNo;
-    public usageType stmtType;
-}
-
-class columnInfo
-{
+class columnInfo {
 
     public tableInfo table;
     public TObjectName column;
 
-    public String toString( )
-    {
-        return column == null ? "" : column.getColumnNameOnly( ).trim( );
+    public String toString() {
+        return column == null ? "" : column.getColumnNameOnly().trim();
     }
 };
 
-enum objectType {
-    SP, Table
-};
 
-class operateInfo
-{
-
-    public String objectUsed;
-    public objectType objectType;
-    public usageType usageType;
-    public List<String> columns = new ArrayList<String>( );
+class operateInfo {
+    public String operateInfoNumber;
+    public String tgtSchema;
+    public String tgtTable;
+    public String typeTarget;
+    public String srcSchema;
+    public String srcTable;
+    public String alias;
+    public usageType type;
+    public joinType joinType;
+    public String onCondition;
+    public String where;
+    public String set;
+    public String callParams;
+    //    public String objectUsed;
+    public List<String> columns = new ArrayList<String>();
+    public List<String> tgtcolumns = new ArrayList<String>();
 }
 
-class procedureInfo
-{
+class procedureInfo {
 
-    public String name;
-    public objectType objectType;
-    public List<operateInfo> operates = new ArrayList<operateInfo>( );
-    public boolean hasTryCatch;
-
-    public procedureInfo( String name )
-    {
-        this.name = name;
-        objectType = objectType.Table;
-    }
+    public List<operateInfo> operates = new ArrayList<operateInfo>();
+    public procedureInfo() {}
 }
-
-class spInfo
-{
+// file info
+class spInfo {
 
     public String file;
-    public String db;
-    public List<procedureInfo> procedures = new ArrayList<procedureInfo>( );
-    public List<builtInFunctionInfo> functions = new ArrayList<builtInFunctionInfo>( );
+    public String purpose;
+    public String version;
+    public List<procedureInfo> procedures = new ArrayList<procedureInfo>();
 }
 
-class tableInfo
-{
+class tableInfo {
 
+    public String tableNumber;
     public String fullName;
-
+    public joinType joinType;
+    public String onCondition;
+    public String alias;
+    public String where;
     public TCustomSqlStatement stmt;
 
-    public String toString( )
-    {
-        return ( fullName == null ? "" : fullName.trim( ) );
+    public String toString() {
+        return (fullName == null ? "" : fullName.trim());
     }
 }
 
 enum usageType {
-    Exec, Read, Insert, Update, Create, Delete, Drop, Call
+    Select, Insert, Update, Create, Delete, Drop, Call, Lock, Exec, Read
+}
+
+enum joinType {
+    inner, left, right, full, main
 }
